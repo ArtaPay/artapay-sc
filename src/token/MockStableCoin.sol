@@ -60,12 +60,4 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     function faucet(uint256 amount) external {
         _mint(msg.sender, amount* 10 ** _decimals);
     }
-
-        /**
-     * @notice Owner can burn USDC
-     * @param amount Amount to burn (in smallest unit)
-     */
-    function burn(uint256 amount) external {
-        _burn(msg.sender, amount);
-    }
 }
