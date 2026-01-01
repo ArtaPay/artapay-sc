@@ -3,4 +3,17 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    "forge-std/=lib/forge-std/src/"
+]
+
+[rpc_endpoints]
+lisk_sepolia = "https://rpc.sepolia-api.lisk.com"
+lisk_mainnet = "https://rpc.api.lisk.com"
+
+[etherscan]
+lisk_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://sepolia-blockscout.lisk.com/api" }
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
