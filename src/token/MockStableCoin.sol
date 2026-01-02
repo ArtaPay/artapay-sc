@@ -8,12 +8,25 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title MockStableCoin
- * @notice Mock stablecoin for testing with permit (ERC-2612) support
- * @dev Supports gasless approvals via permit
+ * @notice Mock stablecoin for testing with permit (ERC-2612) support and faucet rate limiting
+ * @dev Supports gasless approvals via permit and includes anti-abuse faucet mechanism
  */
 contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     uint8 private _decimals;
     string public countryCode;
+    
+    // Faucet rate limiting
+    uint256 public constant FAUCET_COOLDOWN = 1 days;
+    uint256 public constant MAX_FAUCET_AMOUNT = 10000; // Maximum amount per claim
+    
+    mapping(address => uint256) public lastFaucetClaim;
+    
+    // Events
+    event FaucetClaimed(address indexed user, uint256 amount);
+    
+    // Errors
+    error FaucetCooldownActive(uint256 remainingTime);
+    error FaucetAmountExceeded(uint256 requested, uint256 maximum);
 
     /**
      * @notice Constructor
@@ -45,7 +58,7 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     }
 
     /**
-     * @notice Mint tokens (owner only in production, public for testing)
+     * @notice Mint tokens (public for testing, can be restricted to owner if needed)
      * @param to Recipient address
      * @param amount Amount to mint
      */
@@ -54,10 +67,60 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     }
 
     /**
-     * @notice Mint tokens to sender (convenience function for testing)
-     * @param amount Amount to mint
+     * @notice Mint tokens to sender with rate limiting (convenience function for testing)
+     * @param amount Amount to mint (in token units, will be multiplied by decimals)
      */
     function faucet(uint256 amount) external {
-        _mint(msg.sender, amount* 10 ** _decimals);
+        // Check cooldown period
+        uint256 timeSinceLastClaim = block.timestamp - lastFaucetClaim[msg.sender];
+        if (lastFaucetClaim[msg.sender] != 0 && timeSinceLastClaim < FAUCET_COOLDOWN) {
+            revert FaucetCooldownActive(FAUCET_COOLDOWN - timeSinceLastClaim);
+        }
+        
+        // Check maximum amount
+        if (amount > MAX_FAUCET_AMOUNT) {
+            revert FaucetAmountExceeded(amount, MAX_FAUCET_AMOUNT);
+        }
+        
+        // Update last claim time
+        lastFaucetClaim[msg.sender] = block.timestamp;
+        
+        // Mint tokens
+        uint256 mintAmount = amount * 10 ** _decimals;
+        _mint(msg.sender, mintAmount);
+        
+        emit FaucetClaimed(msg.sender, mintAmount);
+    }
+    
+    /**
+     * @notice Get remaining cooldown time for an address
+     * @param user Address to check
+     * @return remainingTime Time remaining until next faucet claim (0 if can claim now)
+     */
+    function getFaucetCooldown(address user) external view returns (uint256 remainingTime) {
+        if (lastFaucetClaim[user] == 0) {
+            return 0;
+        }
+        
+        uint256 timeSinceLastClaim = block.timestamp - lastFaucetClaim[user];
+        if (timeSinceLastClaim >= FAUCET_COOLDOWN) {
+            return 0;
+        }
+        
+        return FAUCET_COOLDOWN - timeSinceLastClaim;
+    }
+    
+    /**
+     * @notice Check if an address can claim from faucet
+     * @param user Address to check
+     * @return canClaim True if user can claim, false otherwise
+     */
+    function canClaimFaucet(address user) external view returns (bool canClaim) {
+        if (lastFaucetClaim[user] == 0) {
+            return true;
+        }
+        
+        uint256 timeSinceLastClaim = block.timestamp - lastFaucetClaim[user];
+        return timeSinceLastClaim >= FAUCET_COOLDOWN;
     }
 }

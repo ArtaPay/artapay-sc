@@ -29,8 +29,8 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     uint256 public constant MIN_ETH_USD_RATE = 1000e8;
     uint256 public constant MAX_ETH_USD_RATE = 100000e8;
 
-    /// @notice rate eth ke usd -> $2900 - manual update 
-    uint256 public ethUsdRate = 2900e8; 
+    /// @notice rate eth ke usd -> $3000 - manual update
+    uint256 public ethUsdRate = 3000e8;
 
     mapping(address => StablecoinInfo) private stablecoins;
     mapping(address => bool) private isRegistered;
