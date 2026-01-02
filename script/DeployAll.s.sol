@@ -29,9 +29,12 @@ contract DeployAll is Script {
     Paymaster public paymaster;
     
     function run() external {
-        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        address deployer = vm.addr(deployerPrivateKey);
         
         console.log("\n=== Configuration ===");
+        console.log("Deployer Address:", deployer);
         console.log("EntryPoint:", vm.envAddress("ENTRYPOINT_ADDRESS"));
         console.log("Initial ETH/USD Rate:", vm.envUint("INITIAL_ETH_USD_RATE"));
         
@@ -61,8 +64,6 @@ contract DeployAll is Script {
         
         // ============ Step 2: Mint Initial Supply to Deployer ============
         console.log("\n=== Minting Initial Supply ===");
-        
-        address deployer = msg.sender;
         
         // Mint tokens to deployer for testing
         usdc.mint(deployer, 1000 * 10**6);   // 1M USDC
