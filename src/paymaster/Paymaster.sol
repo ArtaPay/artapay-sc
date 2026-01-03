@@ -26,7 +26,6 @@ import "../interfaces/IStablecoinRegistry.sol";
  * Key Features:
  * - validatePaymasterUserOp: Validates and approves UserOperations
  * - postOp: Handles post-execution fee collection
- * - Platform fee collection (0.5% default)
  * - Gas fee markup (5% default for gas price volatility)
  * - Multi-stablecoin support via StablecoinRegistry
  */
@@ -36,9 +35,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     using MessageHashUtils for bytes32;
 
     // ============ Constants ============
-    
-    /// @notice Platform fee in basis points (0.5% = 50/10000 bps)
-    uint256 public constant PLATFORM_FEE_BPS = 50;
     
     /// @notice Gas fee markup in basis points (5% = 500/10000 bps)
     uint256 public constant GAS_MARKUP_BPS = 500;
@@ -84,8 +80,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     event GasSponsored(
         address indexed sender,
         address indexed token,
-        uint256 gasFee,
-        uint256 platformFee
+        uint256 gasFee
     );
     
     event FeesWithdrawn(
@@ -235,16 +230,13 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         // Use smaller of actual cost or max cost
         uint256 tokenCost = actualTokenCost < maxTokenCost ? actualTokenCost : maxTokenCost;
         
-        // Calculate platform fee
-        uint256 platformFee = tokenCost * PLATFORM_FEE_BPS / BPS_DENOMINATOR;
-        uint256 totalFee = tokenCost + platformFee;
         
         // Collect fees from user
         if (mode != PostOpMode.postOpReverted) {
-            IERC20(token).safeTransferFrom(sender, address(this), totalFee);
-            collectedFees[token] += totalFee;
+            IERC20(token).safeTransferFrom(sender, address(this), tokenCost);
+            collectedFees[token] += tokenCost;
             
-            emit GasSponsored(sender, token, tokenCost, platformFee);
+            emit GasSponsored(sender, token, tokenCost);
         }
     }
 
@@ -300,25 +292,19 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
      * @param token Stablecoin address
      * @param gasLimit Estimated gas limit
      * @param maxFeePerGas Max fee per gas
-     * @param paymentAmount Payment amount (for platform fee)
      * @return gasCost Gas cost in stablecoin
-     * @return platformFee Platform fee
-     * @return totalCost Total cost
      */
     function estimateTotalCost(
         address token,
         uint256 gasLimit,
-        uint256 maxFeePerGas,
-        uint256 paymentAmount
-    ) external view returns (uint256 gasCost, uint256 platformFee, uint256 totalCost) {
+        uint256 maxFeePerGas
+    ) external view returns (uint256 gasCost) {
         require(supportedTokens[token], "Paymaster: token not supported");
         
         uint256 maxEthCost = gasLimit * maxFeePerGas;
         gasCost = _calculateTokenCost(token, maxEthCost);
-        platformFee = paymentAmount * PLATFORM_FEE_BPS / BPS_DENOMINATOR;
-        totalCost = gasCost + platformFee;
         
-        return (gasCost, platformFee, totalCost);
+        return (gasCost);
     }
 
     // ============ Fee Withdrawal ============

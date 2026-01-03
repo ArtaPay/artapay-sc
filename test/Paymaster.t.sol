@@ -143,26 +143,17 @@ contract PaymasterTest is Test {
     function testEstimateTotalCost() public {
         uint256 gasLimit = 500000;
         uint256 maxFeePerGas = 2 gwei;
-        uint256 paymentAmount = 100 * 10**6; // 100 USDC
 
-        (uint256 gasCost, uint256 platformFee, uint256 totalCost) = 
-            paymaster.estimateTotalCost(
-                address(usdc), 
-                gasLimit, 
-                maxFeePerGas, 
-                paymentAmount
-            );
+        uint256 gasCost = paymaster.estimateTotalCost(
+            address(usdc), 
+            gasLimit, 
+            maxFeePerGas
+        );
 
-        // Platform fee should be 0.5%
-        uint256 expectedPlatformFee = (paymentAmount * 50) / 10000;
-        assertEq(platformFee, expectedPlatformFee, "Platform fee should be 0.5%");
-        
-        // Total should equal sum
-        assertEq(totalCost, gasCost + platformFee, "Total should equal gas + platform");
+        // Gas cost should be greater than 0
+        assertTrue(gasCost > 0, "Gas cost should be greater than 0");
         
         console.log("Gas Cost:", gasCost);
-        console.log("Platform Fee:", platformFee);
-        console.log("Total Cost:", totalCost);
     }
 
     // ============ Test EntryPoint Deposit Management ============
