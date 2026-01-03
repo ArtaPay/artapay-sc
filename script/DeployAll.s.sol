@@ -163,12 +163,12 @@ contract DeployAll is Script {
         console.log("Added 7 supported tokens to Paymaster");
         
         // Deposit ETH to EntryPoint for gas sponsorship (if specified)
-        uint256 depositAmountEth = vm.envOr("ENTRYPOINT_INITIAL_DEPOSIT", uint256(0));
-        if (depositAmountEth > 0) {
-            paymaster.deposit{value: depositAmountEth * 1 ether}();
-            console.log("Deposited to EntryPoint:", depositAmountEth, "ETH");
+        uint256 depositWei = vm.envOr("ENTRYPOINT_DEPOSIT_WEI", uint256(0));
+        if (depositWei > 0) {
+            paymaster.deposit{value: depositWei}();
+            console.log("Deposited to EntryPoint:", depositWei, "wei");
         } else {
-            console.log("Skipping deposit (ENTRYPOINT_INITIAL_DEPOSIT not set or = 0)");
+            console.log("Skipping deposit (ENTRYPOINT_DEPOSIT_WEI not set or = 0)");
         }
         
         // ============ Step 6: Verification ============

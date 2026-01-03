@@ -144,26 +144,59 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     /**
      * @notice Validate a UserOperation for sponsorship
      * @dev Called by EntryPoint during validation phase
+     *      Supports ERC-2612 permit for gasless approval
      * @param userOp The UserOperation to validate
      * @param userOpHash Hash of the UserOperation
      * @param maxCost Maximum cost the paymaster might pay
      * @return context Context to pass to postOp (token, sender, maxCost)
      * @return validationData Validation result (0 = success)
+     * 
+     * paymasterAndData format:
+     * Without permit: [paymaster (20)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)] = 118 bytes
+     * With permit:    [paymaster (20)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)] = 215 bytes
      */
     function validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 maxCost
-    ) external view override onlyEntryPoint whenNotPaused returns (bytes memory context, uint256 validationData) {
-        // Decode paymasterAndData: [paymaster address (20)] [token address (20)] [validUntil (6)] [validAfter (6)] [signature (65)]
-        // Total: 20 + 20 + 6 + 6 + 65 = 117 bytes minimum
-        require(userOp.paymasterAndData.length >= 117, "Paymaster: invalid paymasterAndData");
+    ) external override onlyEntryPoint whenNotPaused returns (bytes memory context, uint256 validationData) {
+        // Minimum: 20 + 20 + 6 + 6 + 1 + 65 = 118 bytes
+        require(userOp.paymasterAndData.length >= 118, "Paymaster: invalid paymasterAndData");
         
-        // Extract data from paymasterAndData
+        // Extract base data from paymasterAndData
         address token = address(bytes20(userOp.paymasterAndData[20:40]));
         uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[40:46]));
         uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[46:52]));
-        bytes memory signature = userOp.paymasterAndData[52:];
+        bool hasPermit = uint8(userOp.paymasterAndData[52]) == 1;
+        
+        bytes memory signature;
+        
+        // Handle permit if present
+        if (hasPermit) {
+            // With permit: need at least 215 bytes
+            require(userOp.paymasterAndData.length >= 215, "Paymaster: invalid permit data");
+            
+            // Decode permit data
+            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[53:85]));
+            uint8 v = uint8(userOp.paymasterAndData[85]);
+            bytes32 r = bytes32(userOp.paymasterAndData[86:118]);
+            bytes32 s = bytes32(userOp.paymasterAndData[118:150]);
+            
+            // Execute permit - allows user to approve without ETH
+            IERC20Permit(token).permit(
+                userOp.sender,      // owner
+                address(this),      // spender (paymaster)
+                type(uint256).max,  // infinite approval
+                deadline,
+                v, r, s
+            );
+            
+            // Signature starts at byte 150
+            signature = userOp.paymasterAndData[150:];
+        } else {
+            // No permit, signature starts at byte 53
+            signature = userOp.paymasterAndData[53:];
+        }
         
         // Validate token is supported
         require(supportedTokens[token], "Paymaster: token not supported");
@@ -172,7 +205,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         bytes32 hash = keccak256(abi.encode(
             userOpHash,
             token,
-            maxCost, // maximum cost the paymaster might pay in eth (gwei)
+            maxCost,
             validUntil,
             validAfter
         ));
@@ -183,12 +216,13 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
             return ("", _packValidationData(true, validUntil, validAfter));
         }
         
-        // Calculate maxcost to token cost
+        // Calculate token cost from ETH cost
         uint256 tokenCost = _calculateTokenCost(token, maxCost);
-        // Check user has sufficient stablecoin balance for fees
+        
+        // Check user has sufficient stablecoin balance
         require(IERC20(token).balanceOf(userOp.sender) >= tokenCost, "Paymaster: insufficient balance");
         
-        // Check allowance
+        // Check allowance (should be set now if permit was executed)
         require(
             IERC20(token).allowance(userOp.sender, address(this)) >= tokenCost,
             "Paymaster: insufficient allowance"
@@ -304,7 +338,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         uint256 maxEthCost = gasLimit * maxFeePerGas;
         gasCost = _calculateTokenCost(token, maxEthCost);
         
-        return (gasCost);
+        return gasCost;
     }
 
     // ============ Fee Withdrawal ============
