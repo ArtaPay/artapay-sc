@@ -220,10 +220,11 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         require(supportedTokens[token], "Paymaster: token not supported");
         
         // Verify signature from authorized signer
+        // Sign static components instead of userOpHash to avoid chicken-egg problem
+        // Hash: keccak256(sender, token, validUntil, validAfter)
         bytes32 hash = keccak256(abi.encode(
-            userOpHash,
+            userOp.sender,  // Smart Account address
             token,
-            maxCost,
             validUntil,
             validAfter
         ));
