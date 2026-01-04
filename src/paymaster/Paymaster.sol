@@ -156,74 +156,77 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
      * Standard v0.7 header (52 bytes):
      * [paymaster (20)] [paymasterVerificationGasLimit (16 - uint128)] [paymasterPostOpGasLimit (16 - uint128)]
      * 
-     * Our custom data starts at byte 52:
-     * Without permit: [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)] = 150 bytes
-     * With permit:    [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)] = 247 bytes
+     * New custom data (payer can differ from sender):
+     * Without permit (170 bytes total):
+     *   [token (20)] [payer (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)]
+     * With permit (267 bytes total):
+     *   [token (20)] [payer (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)]
      * 
-     * Byte offsets:
+     * Byte offsets from start of paymasterAndData:
      * - 0-20:   Paymaster address (handled by EntryPoint)
      * - 20-36:  paymasterVerificationGasLimit (uint128 - handled by EntryPoint)
      * - 36-52:  paymasterPostOpGasLimit (uint128 - handled by EntryPoint)
      * - 52-72:  Token address
-     * - 72-78:  validUntil (uint48)
-     * - 78-84:  validAfter (uint48)
-     * - 84:     hasPermit flag (uint8)
-     * - 85+:    permit data (if hasPermit=1: deadline 32 + v 1 + r 32 + s 32) + signature (65 bytes)
+     * - 72-92:  Payer address (stablecoin payer)
+     * - 92-98:  validUntil (uint48)
+     * - 98-104: validAfter (uint48)
+     * - 104:    hasPermit flag (uint8)
+     * - 105+:   permit data (if hasPermit=1: deadline 32 + v 1 + r 32 + s 32) + signature (65 bytes)
      */
     function validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 maxCost
     ) external override onlyEntryPoint whenNotPaused returns (bytes memory context, uint256 validationData) {
-        // PERBAIKAN 1: Panjang minimum harus disesuaikan (tambah 16 bytes dari 134)
-        // 52 (header) + 20 (token) + 12 (time) + 1 (flag) + 65 (sig) = 150 bytes
-        require(userOp.paymasterAndData.length >= 150, "Paymaster: invalid paymasterAndData");
+        // Minimum length check (header 52 + token 20 + payer 20 + time 12 + flag 1 + sig 65 = 170)
+        require(userOp.paymasterAndData.length >= 170, "Paymaster: invalid paymasterAndData");
 
-        // PERBAIKAN 2: OFFSET DIGESER KE 52 (Standard ERC-4337 v0.7)
-        // [Paymaster(20)] + [VerifGas(16)] + [PostOpGas(16)] = 52 Bytes Header
-        
-        address token = address(bytes20(userOp.paymasterAndData[52:72]));     // Geser dari 36 ke 52
-        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[72:78]));   // Geser dari 56 ke 72
-        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[78:84]));   // Geser dari 62 ke 78
-        bool hasPermit = uint8(userOp.paymasterAndData[84]) == 1;             // Geser dari 68 ke 84
+        address token = address(bytes20(userOp.paymasterAndData[52:72]));
+        address payer = address(bytes20(userOp.paymasterAndData[72:92]));
+        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[92:98]));
+        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[98:104]));
+        bool hasPermit = uint8(userOp.paymasterAndData[104]) == 1;
         
         bytes memory signature;
 
         // Handle permit if present
         if (hasPermit) {
-            // PERBAIKAN 3: Panjang minimum permit (tambah 16 bytes dari 231)
-            require(userOp.paymasterAndData.length >= 247, "Paymaster: invalid permit data");
+            // Length check with permit (header 52 + custom 148 + permit 97 + sig 65 = 267)
+            require(userOp.paymasterAndData.length >= 267, "Paymaster: invalid permit data");
 
-            // Decode permit data (starts at byte 85 now)
-            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[85:117])); // Geser dari 69
-            uint8 v = uint8(userOp.paymasterAndData[117]);                        // Geser dari 101
-            bytes32 r = bytes32(userOp.paymasterAndData[118:150]);                // Geser dari 102
-            bytes32 s = bytes32(userOp.paymasterAndData[150:182]);                // Geser dari 134
+            // Decode permit data (starts at byte 105)
+            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[105:137]));
+            uint8 v = uint8(userOp.paymasterAndData[137]);
+            bytes32 r = bytes32(userOp.paymasterAndData[138:170]);
+            bytes32 s = bytes32(userOp.paymasterAndData[170:202]);
 
-            // Execute permit
+            // Execute permit (payer -> paymaster)
             IERC20Permit(token).permit(
-                userOp.sender,
-                address(this),
+                payer,
+                address(this), // paymaster as spender
                 type(uint256).max,
                 deadline,
                 v, r, s
             );
 
-            // Signature starts at byte 182
-            signature = userOp.paymasterAndData[182:];
+            // Signature starts at byte 202
+            signature = userOp.paymasterAndData[202:];
         } else {
-            // No permit, signature starts at byte 85
-            signature = userOp.paymasterAndData[85:];
+            // No permit, signature starts at byte 105
+            signature = userOp.paymasterAndData[105:];
         }
         
         // Validate token is supported
         require(supportedTokens[token], "Paymaster: token not supported");
+
+        // Payer must be set
+        require(payer != address(0), "Paymaster: invalid payer");
         
         // Verify signature from authorized signer
         // Sign static components instead of userOpHash to avoid chicken-egg problem
-        // Hash: keccak256(sender, token, validUntil, validAfter)
+        // Hash: keccak256(payer, token, validUntil, validAfter)
         bytes32 hash = keccak256(abi.encode(
-            userOp.sender,  // Smart Account address
+            payer,          // Stablecoin payer (can be different from sender)
             token,
             validUntil,
             validAfter
@@ -238,17 +241,17 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         // Calculate token cost from ETH cost
         uint256 tokenCost = _calculateTokenCost(token, maxCost);
         
-        // Check user has sufficient stablecoin balance
-        require(IERC20(token).balanceOf(userOp.sender) >= tokenCost, "Paymaster: insufficient balance");
+        // Check payer has sufficient stablecoin balance
+        require(IERC20(token).balanceOf(payer) >= tokenCost, "Paymaster: insufficient balance");
         
-        // Check allowance (should be set now if permit was executed)
+        // Check allowance (permit above sets allowance for paymaster as spender)
         require(
-            IERC20(token).allowance(userOp.sender, address(this)) >= tokenCost,
+            IERC20(token).allowance(payer, address(this)) >= tokenCost,
             "Paymaster: insufficient allowance"
         );
         
         // Encode context for postOp
-        context = abi.encode(token, userOp.sender, tokenCost);
+        context = abi.encode(token, payer, tokenCost);
         
         // Return validation data
         validationData = _packValidationData(false, validUntil, validAfter);
@@ -271,7 +274,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         uint256 actualUserOpFeePerGas
     ) external override onlyEntryPoint {
         // Decode context
-        (address token, address sender, uint256 maxTokenCost) = abi.decode(
+        (address token, address payer, uint256 maxTokenCost) = abi.decode(
             context,
             (address, address, uint256)
         );
@@ -286,10 +289,10 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         
         // Collect fees from user
         if (mode != PostOpMode.postOpReverted) {
-            IERC20(token).safeTransferFrom(sender, address(this), tokenCost);
+            IERC20(token).safeTransferFrom(payer, address(this), tokenCost);
             collectedFees[token] += tokenCost;
             
-            emit GasSponsored(sender, token, tokenCost);
+            emit GasSponsored(payer, token, tokenCost);
         }
     }
 
