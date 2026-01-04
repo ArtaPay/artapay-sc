@@ -148,70 +148,72 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
      * @param userOp The UserOperation to validate
      * @param userOpHash Hash of the UserOperation
      * @param maxCost Maximum cost the paymaster might pay
-     * @return context Context to pass to postOp (token, sender, maxCost)
+     * @return context Context to pass to postOp (token, sender, maxTokenCost)
      * @return validationData Validation result (0 = success)
      * 
      * paymasterAndData format (ERC-4337 v0.7):
      * 
-     * Standard v0.7 layout:
-     * [paymaster (20)] [paymasterVerificationGasLimit (16)] [paymasterPostOpGasLimit (already in prev 16)] 
+     * Standard v0.7 header (52 bytes):
+     * [paymaster (20)] [paymasterVerificationGasLimit (16 - uint128)] [paymasterPostOpGasLimit (16 - uint128)]
      * 
-     * Our custom data starts at byte 36:
-     * Without permit: [paymaster (20)] [gasLimits (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)] = 134 bytes
-     * With permit:    [paymaster (20)] [gasLimits (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)] = 231 bytes
+     * Our custom data starts at byte 52:
+     * Without permit: [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)] = 150 bytes
+     * With permit:    [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)] = 247 bytes
      * 
      * Byte offsets:
-     * - 0-20: Paymaster address (handled by EntryPoint)
-     * - 20-36: Packed gas limits (handled by EntryPoint) 
-     * - 36-56: Token address
-     * - 56-62: validUntil
-     * - 62-68: validAfter
-     * - 68: hasPermit flag
-     * - 69+: permit data (if hasPermit) + signature
+     * - 0-20:   Paymaster address (handled by EntryPoint)
+     * - 20-36:  paymasterVerificationGasLimit (uint128 - handled by EntryPoint)
+     * - 36-52:  paymasterPostOpGasLimit (uint128 - handled by EntryPoint)
+     * - 52-72:  Token address
+     * - 72-78:  validUntil (uint48)
+     * - 78-84:  validAfter (uint48)
+     * - 84:     hasPermit flag (uint8)
+     * - 85+:    permit data (if hasPermit=1: deadline 32 + v 1 + r 32 + s 32) + signature (65 bytes)
      */
     function validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 maxCost
     ) external override onlyEntryPoint whenNotPaused returns (bytes memory context, uint256 validationData) {
-        // Minimum: 20 + 16 + 20 + 6 + 6 + 1 + 65 = 134 bytes
-        require(userOp.paymasterAndData.length >= 134, "Paymaster: invalid paymasterAndData");
+        // PERBAIKAN 1: Panjang minimum harus disesuaikan (tambah 16 bytes dari 134)
+        // 52 (header) + 20 (token) + 12 (time) + 1 (flag) + 65 (sig) = 150 bytes
+        require(userOp.paymasterAndData.length >= 150, "Paymaster: invalid paymasterAndData");
+
+        // PERBAIKAN 2: OFFSET DIGESER KE 52 (Standard ERC-4337 v0.7)
+        // [Paymaster(20)] + [VerifGas(16)] + [PostOpGas(16)] = 52 Bytes Header
         
-        // Extract base data from paymasterAndData
-        // Note: First 20 bytes = paymaster address, next 16 bytes = packed gas limits (handled by EntryPoint)
-        // Our custom data starts at byte 36
-        address token = address(bytes20(userOp.paymasterAndData[36:56]));
-        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[56:62]));
-        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[62:68]));
-        bool hasPermit = uint8(userOp.paymasterAndData[68]) == 1;
+        address token = address(bytes20(userOp.paymasterAndData[52:72]));     // Geser dari 36 ke 52
+        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[72:78]));   // Geser dari 56 ke 72
+        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[78:84]));   // Geser dari 62 ke 78
+        bool hasPermit = uint8(userOp.paymasterAndData[84]) == 1;             // Geser dari 68 ke 84
         
         bytes memory signature;
-        
+
         // Handle permit if present
         if (hasPermit) {
-            // With permit: need at least 231 bytes (134 + 97 for permit data)
-            require(userOp.paymasterAndData.length >= 231, "Paymaster: invalid permit data");
-            
-            // Decode permit data (starts at byte 69)
-            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[69:101]));
-            uint8 v = uint8(userOp.paymasterAndData[101]);
-            bytes32 r = bytes32(userOp.paymasterAndData[102:134]);
-            bytes32 s = bytes32(userOp.paymasterAndData[134:166]);
-            
-            // Execute permit - allows user to approve without ETH
+            // PERBAIKAN 3: Panjang minimum permit (tambah 16 bytes dari 231)
+            require(userOp.paymasterAndData.length >= 247, "Paymaster: invalid permit data");
+
+            // Decode permit data (starts at byte 85 now)
+            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[85:117])); // Geser dari 69
+            uint8 v = uint8(userOp.paymasterAndData[117]);                        // Geser dari 101
+            bytes32 r = bytes32(userOp.paymasterAndData[118:150]);                // Geser dari 102
+            bytes32 s = bytes32(userOp.paymasterAndData[150:182]);                // Geser dari 134
+
+            // Execute permit
             IERC20Permit(token).permit(
-                userOp.sender,      // owner
-                address(this),      // spender (paymaster)
-                type(uint256).max,  // infinite approval
+                userOp.sender,
+                address(this),
+                type(uint256).max,
                 deadline,
                 v, r, s
             );
-            
-            // Signature starts at byte 166
-            signature = userOp.paymasterAndData[166:];
+
+            // Signature starts at byte 182
+            signature = userOp.paymasterAndData[182:];
         } else {
-            // No permit, signature starts at byte 69
-            signature = userOp.paymasterAndData[69:];
+            // No permit, signature starts at byte 85
+            signature = userOp.paymasterAndData[85:];
         }
         
         // Validate token is supported

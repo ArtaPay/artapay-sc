@@ -430,10 +430,11 @@ contract PaymasterTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash); // user = address(2), private key = 2
         
         // Build paymasterAndData with permit (ERC-4337 v0.7 format)
+        // Format: [Paymaster 20][VerifGasLimit 16][PostOpGasLimit 16][Token 20][validUntil 6][validAfter 6][hasPermit 1][permit data][sig 65]
         bytes memory paymasterAndData = abi.encodePacked(
             address(paymaster),                  // 20 bytes
-            uint64(100000),                      // paymasterVerificationGasLimit - 8 bytes
-            uint64(50000),                       // paymasterPostOpGasLimit - 8 bytes
+            uint128(100000),                     // paymasterVerificationGasLimit - 16 bytes
+            uint128(50000),                      // paymasterPostOpGasLimit - 16 bytes
             address(usdc),                       // 20 bytes
             uint48(block.timestamp + 1 hours),   // validUntil - 6 bytes
             uint48(0),                           // validAfter - 6 bytes
@@ -445,9 +446,9 @@ contract PaymasterTest is Test {
             bytes(hex"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000") // dummy signature - 65 bytes
         );
         
-        // v0.7 format: minimum 231 bytes (20 + 16 + 20 + 6 + 6 + 1 + 32 + 1 + 32 + 32 + 65)
-        assertTrue(paymasterAndData.length >= 231, "paymasterAndData too short for v0.7");
-        assertEq(paymasterAndData.length, 231, "paymasterAndData should be exactly 231 bytes");
+        // v0.7 format: 247 bytes (20 + 16 + 16 + 20 + 6 + 6 + 1 + 32 + 1 + 32 + 32 + 65)
+        assertTrue(paymasterAndData.length >= 247, "paymasterAndData too short for v0.7");
+        assertEq(paymasterAndData.length, 247, "paymasterAndData should be exactly 247 bytes");
         
         // After permit is executed, allowance should be max
         // Note: We can't fully test validatePaymasterUserOp without EntryPoint
