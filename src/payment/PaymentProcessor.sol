@@ -13,7 +13,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     address feeRecipient;
 
     uint256 constant PLATFORM_FEE = 50;
-    uint256 constant SWAP_FEE = 10;
     uint256 constant BPS_DENOMINATOR = 10000;
     uint256 constant PAYMENT_EXPIRY = 5 minutes;
 
@@ -86,18 +85,19 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
 
         uint256 baseAmount = payment.requestedAmount;
         uint256 platformFee = (baseAmount * PLATFORM_FEE) / BPS_DENOMINATOR;
-        uint256 totalRequired = baseAmount + platformFee;
+        uint256 totalInRequestedToken = baseAmount + platformFee;
         uint256 swapFee = 0;
+        uint256 totalRequired = totalInRequestedToken;
 
-        if (needSwap == true) {
-            uint256 convertedAmount = registry.convert(
-                payment.requestedToken,
+        if (needSwap) {
+            // Get quote from StableSwap (includes swap fee)
+            (, uint256 fee, uint256 totalUserPays) = swap.getSwapQuote(
                 payToken,
-                totalRequired
+                payment.requestedToken,
+                totalInRequestedToken
             );
-            swapFee = (convertedAmount * SWAP_FEE) / BPS_DENOMINATOR;
-
-            totalRequired = convertedAmount + swapFee;
+            swapFee = fee;
+            totalRequired = totalUserPays;
         }
 
         return
@@ -122,12 +122,15 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 totalInRequestedToken = baseAmount + platformFee;
 
         uint256 totalRequired;
-        uint256 swapFee = 0;
 
         if (needSwap) {
-            uint256 totalInPayToken = registry.convert(payment.requestedToken, payToken, totalInRequestedToken);
-            swapFee = (totalInPayToken * SWAP_FEE) / BPS_DENOMINATOR;
-            totalRequired = totalInPayToken + swapFee;
+            // Get quote from StableSwap - fee is handled by StableSwap
+            (, , uint256 totalUserPays) = swap.getSwapQuote(
+                payToken,
+                payment.requestedToken,
+                totalInRequestedToken
+            );
+            totalRequired = totalUserPays;
         } else {
             totalRequired = totalInRequestedToken;
         }
@@ -140,10 +143,9 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 amountForFeeRecipient = platformFee;
 
         if (needSwap) {
+            // Approve and swap - StableSwap collects its own fee
             IERC20(payToken).approve(address(swap), totalRequired);
-
-            uint256 swapAmountIn = totalRequired - swapFee;
-            swap.swap(swapAmountIn, payToken, payment.requestedToken, totalInRequestedToken);
+            swap.swap(totalRequired, payToken, payment.requestedToken, totalInRequestedToken);
         }
 
         IERC20(payment.requestedToken).transfer(payment.recipient, amountForRecipient);
