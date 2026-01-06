@@ -4,34 +4,44 @@ pragma solidity ^0.8.20;
 interface IPaymentProcessor {
     enum PaymentStatus { Pending, Completed, Cancelled, Expired }
 
+    /// @notice Payment request data (signed by merchant off-chain)
     struct PaymentRequest {
-        bytes32 requestId;
-        address recipient;
-        address requestedToken;
-        uint256 requestedAmount;
-        address payer;
-        address payToken;
-        uint256 paidAmount;
-        uint256 createdAt;
-        uint256 expiresAt;
-        PaymentStatus status;
+        address recipient;       // Merchant address
+        address requestedToken;  // Token merchant wants to receive
+        uint256 requestedAmount; // Amount merchant wants
+        uint256 deadline;        // Expiry timestamp
+        bytes32 nonce;           // Unique nonce for replay protection
     }
-
 
     struct FeeBreakdown {
         uint256 baseAmount;
-        uint256 platformFee;    // 0.5%
-        uint256 swapFee;        // 0.1% (jika swap)
-        uint256 totalRequired;  //total yg user bayar
+        uint256 platformFee;    // 0.3%
+        uint256 swapFee;        // 0.1% (if swap needed)
+        uint256 totalRequired;  // Total user pays
     }
 
-    event PaymentRequestCreated(bytes32 indexed requestId, address indexed recipient, address requestedToken, uint256 requestedAmount, uint256 expiresAt );
-    event PaymentCompleted(bytes32 indexed requestId, address indexed payer, address payToken, uint256 paidAmount);
-    event PaymentCancelled(bytes32 indexed requestId);
+    // Events
+    event PaymentCompleted(
+        bytes32 indexed nonce,
+        address indexed recipient,
+        address indexed payer,
+        address requestedToken,
+        address payToken,
+        uint256 requestedAmount,
+        uint256 paidAmount
+    );
 
-    function createPaymentRequest(address requestedToken, uint256 requestedAmount) external returns(bytes32 requestId);
-    function calculatePaymentCost(bytes32 requestId, address payToken) external view returns(FeeBreakdown memory);
-    function executePayment(bytes32 requestId, uint256 maxAmountToPay, address payToken) external;
-    function cancelPayment(bytes32 requestId) external;
-    function getPayment(bytes32 requestId) external view returns (PaymentRequest memory);
+    // Off-chain flow (gasless for merchant) is the ONLY flow now
+    function calculatePaymentCost(
+        address requestedToken,
+        uint256 requestedAmount,
+        address payToken
+    ) external view returns (FeeBreakdown memory);
+
+    function executePayment(
+        PaymentRequest calldata request,
+        bytes calldata merchantSignature,
+        address payToken,
+        uint256 maxAmountToPay
+    ) external;
 }

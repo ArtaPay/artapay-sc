@@ -3,31 +3,43 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "../interfaces/IPaymentProcessor.sol";
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/IStablecoinRegistry.sol";
 
+/**
+ * @title PaymentProcessor
+ * @notice Handles payment requests via off-chain signatures (Gasless for Merchant)
+ * @dev Merchant signs request off-chain (FREE), payer submits with signature.
+ */
 contract PaymentProcessor is IPaymentProcessor, Ownable {
+    using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
+
     IStableSwap public swap;
     IStablecoinRegistry public registry;
-    address feeRecipient;
+    address public feeRecipient;
 
-    uint256 constant PLATFORM_FEE = 50;
-    uint256 constant BPS_DENOMINATOR = 10000;
-    uint256 constant PAYMENT_EXPIRY = 5 minutes;
+    uint256 public constant PLATFORM_FEE = 30; // 0.3% (30 BPS)
+    uint256 public constant BPS_DENOMINATOR = 10000;
 
-    mapping(bytes32 => PaymentRequest) public payments;
-    uint256 private nonce;
+    // Replay protection - tracks used nonces
+    mapping(bytes32 => bool) public usedNonces;
 
+    // ============ Errors ============
     error InvalidAmount();
     error InvalidToken();
-    error PaymentNotFound();
-    error PaymentExpired();
-    error PaymentAlreadyCompleted();
-    error NotRecipient();
-    error PaymentNotPending();
+    error InvalidRecipient();
+    error InvalidSignature();
     error SlippageExceeded();
+    error NonceAlreadyUsed();
+    error DeadlineExpired();
 
+    // ============ Constructor ============
     constructor(
         address _swap,
         address _registry,
@@ -38,140 +50,222 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         feeRecipient = _feeRecipient;
     }
 
-    function createPaymentRequest(
+    // ============================================================
+    //                      PAYMENT FLOW
+    // ============================================================
+
+    /**
+     * @notice Calculate payment cost for a request (pure calculation, no storage read)
+     * @param requestedToken Token the merchant wants to receive
+     * @param requestedAmount Amount the merchant wants
+     * @param payToken Token the payer will use
+     */
+    function calculatePaymentCost(
         address requestedToken,
-        uint256 requestedAmount
-    ) external returns (bytes32 requestId) {
-        if (requestedAmount == 0) revert InvalidAmount();
+        uint256 requestedAmount,
+        address payToken
+    ) external view returns (FeeBreakdown memory) {
         if (!registry.isStablecoinActive(requestedToken)) revert InvalidToken();
+        if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
 
-        uint256 expiresAt = block.timestamp + PAYMENT_EXPIRY;
-
-        requestId = keccak256(
-            abi.encodePacked(msg.sender, requestedToken, requestedAmount,block.timestamp, nonce));
-        nonce++;
-
-        payments[requestId] = PaymentRequest({
-            requestId: requestId,
-            recipient: msg.sender,
-            requestedToken: requestedToken,
-            requestedAmount: requestedAmount,
-            payer: address(0),
-            payToken: address(0),
-            paidAmount: 0,
-            createdAt: block.timestamp,
-            expiresAt: expiresAt,
-            status: PaymentStatus.Pending
-        });
-
-        emit PaymentRequestCreated(
-            requestId,
-            msg.sender,
-            requestedToken,
-            requestedAmount,
-            expiresAt
-        );
-
-        return requestId;
+        return _calculateCost(requestedToken, requestedAmount, payToken);
     }
 
-    function calculatePaymentCost(bytes32 requestId, address payToken) external view returns (FeeBreakdown memory) {
-        PaymentRequest storage payment = payments[requestId];
-        if (payment.recipient == address(0)) revert PaymentNotFound();
-        if (payment.expiresAt < block.timestamp) revert PaymentExpired();
-        if (payment.status != PaymentStatus.Pending) revert PaymentNotPending();
+    /**
+     * @notice Execute payment using off-chain signed request (GASLESS FOR MERCHANT)
+     * @dev Merchant signs the request off-chain, payer submits with the signature
+     * @param request The payment request data signed by merchant
+     * @param merchantSignature Merchant's signature over the request hash
+     * @param payToken Token the payer will use
+     * @param maxAmountToPay Maximum amount payer is willing to pay (slippage protection)
+     */
+    function executePayment(
+        PaymentRequest calldata request,
+        bytes calldata merchantSignature,
+        address payToken,
+        uint256 maxAmountToPay
+    ) external {
+        // Validate request
+        if (request.recipient == address(0)) revert InvalidRecipient();
+        if (request.requestedAmount == 0) revert InvalidAmount();
+        if (request.deadline < block.timestamp) revert DeadlineExpired();
+        if (usedNonces[request.nonce]) revert NonceAlreadyUsed();
+        if (!registry.isStablecoinActive(request.requestedToken)) revert InvalidToken();
+        if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
 
-        bool needSwap = (payToken != payment.requestedToken);
+        // Verify merchant signature
+        bytes32 requestHash = _hashPaymentRequest(request);
+        bytes32 ethSignedHash = requestHash.toEthSignedMessageHash();
+        address recoveredSigner = ethSignedHash.recover(merchantSignature);
 
-        uint256 baseAmount = payment.requestedAmount;
+        if (recoveredSigner != request.recipient) revert InvalidSignature();
+
+        // Mark nonce as used (replay protection)
+        usedNonces[request.nonce] = true;
+
+        // Calculate cost
+        FeeBreakdown memory cost = _calculateCost(
+            request.requestedToken,
+            request.requestedAmount,
+            payToken
+        );
+
+        if (cost.totalRequired > maxAmountToPay) revert SlippageExceeded();
+
+        // Process payment
+        _processPayment(
+            msg.sender,
+            request.recipient,
+            payToken,
+            request.requestedToken,
+            request.requestedAmount,
+            cost
+        );
+
+        emit PaymentCompleted(
+            request.nonce,
+            request.recipient,
+            msg.sender,
+            request.requestedToken,
+            payToken,
+            request.requestedAmount,
+            cost.totalRequired
+        );
+    }
+
+    /**
+     * @notice Check if a nonce has been used
+     */
+    function isNonceUsed(bytes32 nonceValue) external view returns (bool) {
+        return usedNonces[nonceValue];
+    }
+
+    /**
+     * @notice Get the hash of a payment request (for merchant to sign)
+     * @dev This is a helper for frontend/backend to construct the correct hash
+     */
+    function getPaymentRequestHash(PaymentRequest calldata request) external view returns (bytes32) {
+        return _hashPaymentRequest(request);
+    }
+
+    // ============================================================
+    //                    INTERNAL FUNCTIONS
+    // ============================================================
+
+    /**
+     * @dev Calculate fee breakdown for a payment
+     */
+    function _calculateCost(
+        address requestedToken,
+        uint256 requestedAmount,
+        address payToken
+    ) internal view returns (FeeBreakdown memory) {
+        bool needSwap = (payToken != requestedToken);
+
+        uint256 baseAmount = requestedAmount;
         uint256 platformFee = (baseAmount * PLATFORM_FEE) / BPS_DENOMINATOR;
         uint256 totalInRequestedToken = baseAmount + platformFee;
         uint256 swapFee = 0;
         uint256 totalRequired = totalInRequestedToken;
 
         if (needSwap) {
-            // Get quote from StableSwap (includes swap fee)
             (, uint256 fee, uint256 totalUserPays) = swap.getSwapQuote(
                 payToken,
-                payment.requestedToken,
+                requestedToken,
                 totalInRequestedToken
             );
             swapFee = fee;
             totalRequired = totalUserPays;
         }
 
-        return
-            FeeBreakdown({
-                baseAmount: baseAmount,
-                platformFee: platformFee,
-                swapFee: swapFee,
-                totalRequired: totalRequired
-            });
+        return FeeBreakdown({
+            baseAmount: baseAmount,
+            platformFee: platformFee,
+            swapFee: swapFee,
+            totalRequired: totalRequired
+        });
     }
 
-    function executePayment(bytes32 requestId, uint256 maxAmountToPay, address payToken) external {
-        PaymentRequest storage payment = payments[requestId];
-        if (payment.recipient == address(0)) revert PaymentNotFound();
-        if (payment.expiresAt < block.timestamp) revert PaymentExpired();
-        if (payment.status != PaymentStatus.Pending) revert PaymentNotPending();
-        if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
+    /**
+     * @dev Process the actual payment transfer
+     */
+    function _processPayment(
+        address payer,
+        address recipient,
+        address payToken,
+        address requestedToken,
+        uint256 requestedAmount,
+        FeeBreakdown memory cost
+    ) internal {
+        bool needSwap = (payToken != requestedToken);
 
-        bool needSwap = (payToken != payment.requestedToken);
-        uint256 baseAmount = payment.requestedAmount;
-        uint256 platformFee = (baseAmount * PLATFORM_FEE) / BPS_DENOMINATOR;
-        uint256 totalInRequestedToken = baseAmount + platformFee;
+        // Pull tokens from payer
+        IERC20(payToken).safeTransferFrom(payer, address(this), cost.totalRequired);
 
-        uint256 totalRequired;
+        uint256 amountForRecipient = requestedAmount;
+        uint256 amountForFeeRecipient = cost.platformFee;
 
         if (needSwap) {
-            // Get quote from StableSwap - fee is handled by StableSwap
-            (, , uint256 totalUserPays) = swap.getSwapQuote(
-                payToken,
-                payment.requestedToken,
-                totalInRequestedToken
-            );
-            totalRequired = totalUserPays;
-        } else {
-            totalRequired = totalInRequestedToken;
+            // Calculate base amount for swap (totalRequired includes swap fee, but StableSwap adds fee internally)
+            // So we need to work backwards: totalRequired = baseAmount + fee, where fee = baseAmount * SWAP_FEE
+            // totalRequired = baseAmount * (1 + SWAP_FEE/10000)
+            // baseAmount = totalRequired / (1 + SWAP_FEE/10000)
+            uint256 baseAmountForSwap = (cost.totalRequired * 10000) / 10010; // Divide by 1.001 (0.1% fee)
+            
+            // Approve and swap
+            IERC20(payToken).approve(address(swap), cost.totalRequired);
+            swap.swap(baseAmountForSwap, payToken, requestedToken, requestedAmount + amountForFeeRecipient);
         }
 
-        if (totalRequired > maxAmountToPay) revert SlippageExceeded();
+        // Transfer to merchant
+        IERC20(requestedToken).safeTransfer(recipient, amountForRecipient);
 
-        IERC20(payToken).transferFrom(msg.sender, address(this), totalRequired);
-
-        uint256 amountForRecipient = baseAmount;
-        uint256 amountForFeeRecipient = platformFee;
-
-        if (needSwap) {
-            // Approve and swap - StableSwap collects its own fee
-            IERC20(payToken).approve(address(swap), totalRequired);
-            swap.swap(totalRequired, payToken, payment.requestedToken, totalInRequestedToken);
-        }
-
-        IERC20(payment.requestedToken).transfer(payment.recipient, amountForRecipient);
-        
-        IERC20(payment.requestedToken).transfer(feeRecipient, amountForFeeRecipient);
-
-        payment.payer = msg.sender;
-        payment.payToken = payToken;
-        payment.paidAmount = totalRequired;
-        payment.status = PaymentStatus.Completed;
-
-        emit PaymentCompleted(requestId, msg.sender, payToken, totalRequired);
+        // Transfer platform fee
+        IERC20(requestedToken).safeTransfer(feeRecipient, amountForFeeRecipient);
     }
 
-    function cancelPayment(bytes32 requestId) external {
-        PaymentRequest storage payment = payments[requestId];
-        if (payment.recipient == address(0)) revert PaymentNotFound();
-        if (payment.recipient != msg.sender) revert NotRecipient();
-        if (payment.status != PaymentStatus.Pending) revert PaymentNotPending();
-
-        payment.status = PaymentStatus.Cancelled;
-
-        emit PaymentCancelled(requestId);
+    /**
+     * @dev Hash the payment request for signature verification
+     */
+    function _hashPaymentRequest(PaymentRequest calldata request) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                address(this),           // Include contract address to prevent cross-contract replay
+                block.chainid,           // Include chain ID to prevent cross-chain replay
+                request.recipient,
+                request.requestedToken,
+                request.requestedAmount,
+                request.deadline,
+                request.nonce
+            )
+        );
     }
 
-    function getPayment(bytes32 requestId) external view returns (PaymentRequest memory) {
-        return payments[requestId];
+    // ============================================================
+    //                    ADMIN FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Update fee recipient
+     */
+    function setFeeRecipient(address _feeRecipient) external onlyOwner {
+        require(_feeRecipient != address(0), "Invalid fee recipient");
+        feeRecipient = _feeRecipient;
+    }
+
+    /**
+     * @notice Update swap contract
+     */
+    function setSwap(address _swap) external onlyOwner {
+        require(_swap != address(0), "Invalid swap address");
+        swap = IStableSwap(_swap);
+    }
+
+    /**
+     * @notice Update registry contract
+     */
+    function setRegistry(address _registry) external onlyOwner {
+        require(_registry != address(0), "Invalid registry address");
+        registry = IStablecoinRegistry(_registry);
     }
 }
