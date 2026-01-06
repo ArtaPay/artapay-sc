@@ -92,13 +92,14 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         if (usedNonces[request.nonce]) revert NonceAlreadyUsed();
         if (!registry.isStablecoinActive(request.requestedToken)) revert InvalidToken();
         if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
+        if (request.merchantSigner == address(0)) revert InvalidSignature();
 
         // Verify merchant signature
         bytes32 requestHash = _hashPaymentRequest(request);
         bytes32 ethSignedHash = requestHash.toEthSignedMessageHash();
         address recoveredSigner = ethSignedHash.recover(merchantSignature);
 
-        if (recoveredSigner != request.recipient) revert InvalidSignature();
+        if (recoveredSigner != request.merchantSigner) revert InvalidSignature();
 
         // Mark nonce as used (replay protection)
         usedNonces[request.nonce] = true;
@@ -169,13 +170,12 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 totalRequired = totalInRequestedToken;
 
         if (needSwap) {
-            (, uint256 fee, uint256 totalUserPays) = swap.getSwapQuote(
-                payToken,
-                requestedToken,
-                totalInRequestedToken
-            );
-            swapFee = fee;
-            totalRequired = totalUserPays;
+            // Determine how much payToken is needed to deliver the requested token amount
+            uint256 payTokenAmount = registry.convert(requestedToken, payToken, totalInRequestedToken);
+
+            // Apply swap fee (0.1% = 10 BPS)
+            swapFee = (payTokenAmount * 10) / BPS_DENOMINATOR;
+            totalRequired = payTokenAmount + swapFee;
         }
 
         return FeeBreakdown({
@@ -236,7 +236,8 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
                 request.requestedToken,
                 request.requestedAmount,
                 request.deadline,
-                request.nonce
+                request.nonce,
+                request.merchantSigner
             )
         );
     }

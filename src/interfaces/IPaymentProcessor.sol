@@ -6,11 +6,12 @@ interface IPaymentProcessor {
 
     /// @notice Payment request data (signed by merchant off-chain)
     struct PaymentRequest {
-        address recipient;       // Merchant address
+        address recipient;       // Merchant payout address (can be Smart Account)
         address requestedToken;  // Token merchant wants to receive
         uint256 requestedAmount; // Amount merchant wants
         uint256 deadline;        // Expiry timestamp
         bytes32 nonce;           // Unique nonce for replay protection
+        address merchantSigner;  // EOA that signs off-chain request
     }
 
     struct FeeBreakdown {
