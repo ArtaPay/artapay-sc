@@ -170,8 +170,42 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 totalRequired = totalInRequestedToken;
 
         if (needSwap) {
-            // Determine how much payToken is needed to deliver the requested token amount
-            uint256 payTokenAmount = registry.convert(requestedToken, payToken, totalInRequestedToken);
+            // Determine how much payToken is needed to deliver the requested token amount.
+            // Convert rounding can undershoot, so adjust payTokenAmount to ensure swap output
+            // covers the requested amount + platform fee.
+            uint256 payTokenAmount = registry.convert(
+                requestedToken,
+                payToken,
+                totalInRequestedToken
+            );
+
+            uint256 swappedOut = registry.convert(
+                payToken,
+                requestedToken,
+                payTokenAmount
+            );
+            if (swappedOut < totalInRequestedToken) {
+                if (swappedOut == 0) {
+                    payTokenAmount += 1;
+                } else {
+                    uint256 adjusted =
+                        (payTokenAmount * totalInRequestedToken + swappedOut - 1) /
+                        swappedOut;
+                    if (adjusted <= payTokenAmount) {
+                        adjusted = payTokenAmount + 1;
+                    }
+                    payTokenAmount = adjusted;
+                }
+
+                swappedOut = registry.convert(
+                    payToken,
+                    requestedToken,
+                    payTokenAmount
+                );
+                if (swappedOut < totalInRequestedToken) {
+                    payTokenAmount += 1;
+                }
+            }
 
             // Apply swap fee (0.1% = 10 BPS)
             swapFee = (payTokenAmount * 10) / BPS_DENOMINATOR;
@@ -206,15 +240,16 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 amountForFeeRecipient = cost.platformFee;
 
         if (needSwap) {
-            // Calculate base amount for swap (totalRequired includes swap fee, but StableSwap adds fee internally)
-            // So we need to work backwards: totalRequired = baseAmount + fee, where fee = baseAmount * SWAP_FEE
-            // totalRequired = baseAmount * (1 + SWAP_FEE/10000)
-            // baseAmount = totalRequired / (1 + SWAP_FEE/10000)
-            uint256 baseAmountForSwap = (cost.totalRequired * 10000) / 10010; // Divide by 1.001 (0.1% fee)
-            
+            uint256 baseAmountForSwap = cost.totalRequired - cost.swapFee;
+
             // Approve and swap
             IERC20(payToken).approve(address(swap), cost.totalRequired);
-            swap.swap(baseAmountForSwap, payToken, requestedToken, requestedAmount + amountForFeeRecipient);
+            swap.swap(
+                baseAmountForSwap,
+                payToken,
+                requestedToken,
+                requestedAmount + amountForFeeRecipient
+            );
         }
 
         // Transfer to merchant
