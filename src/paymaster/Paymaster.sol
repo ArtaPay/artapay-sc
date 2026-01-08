@@ -16,25 +16,11 @@ import "../interfaces/IStablecoinRegistry.sol";
  * @title Paymaster
  * @notice ERC-4337 Paymaster for gasless stablecoin transactions
  * @dev Implements IPaymaster interface for EntryPoint integration
- * 
- * Architecture:
- * - Full ERC-4337 Account Abstraction support
- * - Works with Gelato Smart Wallet SDK (uses Gelato Bundler)
- * - Sponsors gas fees and collects payment in stablecoins
- * - Supports ERC-2612 Permit for gasless approval
- * 
- * Key Features:
- * - validatePaymasterUserOp: Validates and approves UserOperations
- * - postOp: Handles post-execution fee collection
- * - Gas fee markup (5% default for gas price volatility)
- * - Multi-stablecoin support via StablecoinRegistry
  */
 contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
-
-    // ============ Constants ============
     
     /// @notice Gas fee markup in basis points (5% = 500/10000 bps)
     uint256 public constant GAS_MARKUP_BPS = 500;
@@ -54,8 +40,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     /// @notice Valid signature marker
     uint256 private constant SIG_VALIDATION_SUCCESS = 0;
     uint256 private constant SIG_VALIDATION_FAILED = 1;
-
-    // ============ State Variables ============
     
     /// @notice ERC-4337 EntryPoint contract
     IEntryPoint public immutable entryPoint;
@@ -74,8 +58,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     
     /// @notice Used nonces for replay protection
     mapping(bytes32 => bool) public usedNonces;
-
-    // ============ Events ============
     
     event GasSponsored(
         address indexed sender,
@@ -94,8 +76,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     event RegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
     event Deposited(address indexed account, uint256 amount);
     event Withdrawn(address indexed account, uint256 amount);
-
-    // ============ Errors ============
     
     error InvalidEntryPoint();
     error InvalidToken();
@@ -104,8 +84,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     error InvalidSignature();
     error ExpiredSignature();
     error UsedNonce();
-
-    // ============ Modifiers ============
     
     /**
      * @notice Restrict calls to EntryPoint only
@@ -114,8 +92,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         require(msg.sender == address(entryPoint), "Paymaster: not EntryPoint");
         _;
     }
-
-    // ============ Constructor ============
     
     /**
      * @notice Initialize the ERC-4337 Paymaster
@@ -131,99 +107,65 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         
         entryPoint = IEntryPoint(_entryPoint);
         stablecoinRegistry = IStablecoinRegistry(_stablecoinRegistry);
-        
-        // Owner is authorized signer by default
+
         authorizedSigners[msg.sender] = true;
         
         emit RegistryUpdated(address(0), _stablecoinRegistry);
         emit SignerUpdated(msg.sender, true);
     }
-
-    // ============ ERC-4337 Paymaster Interface ============
     
     /**
      * @notice Validate a UserOperation for sponsorship
      * @dev Called by EntryPoint during validation phase
-     *      Supports ERC-2612 permit for gasless approval
+     *      Supports ERC-2612 permit 
      * @param userOp The UserOperation to validate
      * @param userOpHash Hash of the UserOperation
      * @param maxCost Maximum cost the paymaster might pay
      * @return context Context to pass to postOp (token, sender, maxTokenCost)
      * @return validationData Validation result (0 = success)
-     * 
-     * paymasterAndData format (ERC-4337 v0.7):
-     * 
-     * Standard v0.7 header (52 bytes):
-     * [paymaster (20)] [paymasterVerificationGasLimit (16 - uint128)] [paymasterPostOpGasLimit (16 - uint128)]
-     * 
-     * Our custom data starts at byte 52:
-     * Without permit: [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=0 (1)] [signature (65)] = 150 bytes
-     * With permit:    [paymaster (20)] [verifGas (16)] [postOpGas (16)] [token (20)] [validUntil (6)] [validAfter (6)] [hasPermit=1 (1)] [deadline (32)] [v (1)] [r (32)] [s (32)] [signature (65)] = 247 bytes
-     * 
-     * Byte offsets:
-     * - 0-20:   Paymaster address (handled by EntryPoint)
-     * - 20-36:  paymasterVerificationGasLimit (uint128 - handled by EntryPoint)
-     * - 36-52:  paymasterPostOpGasLimit (uint128 - handled by EntryPoint)
-     * - 52-72:  Token address
-     * - 72-78:  validUntil (uint48)
-     * - 78-84:  validAfter (uint48)
-     * - 84:     hasPermit flag (uint8)
-     * - 85+:    permit data (if hasPermit=1: deadline 32 + v 1 + r 32 + s 32) + signature (65 bytes)
      */
     function validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 maxCost
     ) external override onlyEntryPoint whenNotPaused returns (bytes memory context, uint256 validationData) {
-        // PERBAIKAN 1: Panjang minimum harus disesuaikan (tambah 16 bytes dari 134)
-        // 52 (header) + 20 (token) + 12 (time) + 1 (flag) + 65 (sig) = 150 bytes
-        require(userOp.paymasterAndData.length >= 150, "Paymaster: invalid paymasterAndData");
+        require(userOp.paymasterAndData.length >= 170, "Paymaster: invalid paymasterAndData");
 
-        // PERBAIKAN 2: OFFSET DIGESER KE 52 (Standard ERC-4337 v0.7)
-        // [Paymaster(20)] + [VerifGas(16)] + [PostOpGas(16)] = 52 Bytes Header
-        
-        address token = address(bytes20(userOp.paymasterAndData[52:72]));     // Geser dari 36 ke 52
-        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[72:78]));   // Geser dari 56 ke 72
-        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[78:84]));   // Geser dari 62 ke 78
-        bool hasPermit = uint8(userOp.paymasterAndData[84]) == 1;             // Geser dari 68 ke 84
+        address token = address(bytes20(userOp.paymasterAndData[52:72]));
+        address payer = address(bytes20(userOp.paymasterAndData[72:92]));
+        uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[92:98]));
+        uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[98:104]));
+        bool hasPermit = uint8(userOp.paymasterAndData[104]) == 1;
         
         bytes memory signature;
 
-        // Handle permit if present
         if (hasPermit) {
-            // PERBAIKAN 3: Panjang minimum permit (tambah 16 bytes dari 231)
-            require(userOp.paymasterAndData.length >= 247, "Paymaster: invalid permit data");
+            require(userOp.paymasterAndData.length >= 267, "Paymaster: invalid permit data");
 
-            // Decode permit data (starts at byte 85 now)
-            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[85:117])); // Geser dari 69
-            uint8 v = uint8(userOp.paymasterAndData[117]);                        // Geser dari 101
-            bytes32 r = bytes32(userOp.paymasterAndData[118:150]);                // Geser dari 102
-            bytes32 s = bytes32(userOp.paymasterAndData[150:182]);                // Geser dari 134
+            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[105:137]));
+            uint8 v = uint8(userOp.paymasterAndData[137]);
+            bytes32 r = bytes32(userOp.paymasterAndData[138:170]);
+            bytes32 s = bytes32(userOp.paymasterAndData[170:202]);
 
-            // Execute permit
             IERC20Permit(token).permit(
-                userOp.sender,
-                address(this),
+                payer,
+                address(this), 
                 type(uint256).max,
                 deadline,
                 v, r, s
             );
 
-            // Signature starts at byte 182
-            signature = userOp.paymasterAndData[182:];
+            signature = userOp.paymasterAndData[202:];
         } else {
-            // No permit, signature starts at byte 85
-            signature = userOp.paymasterAndData[85:];
+            signature = userOp.paymasterAndData[105:];
         }
         
-        // Validate token is supported
         require(supportedTokens[token], "Paymaster: token not supported");
+
+        require(payer != address(0), "Paymaster: invalid payer");
         
-        // Verify signature from authorized signer
-        // Sign static components instead of userOpHash to avoid chicken-egg problem
-        // Hash: keccak256(sender, token, validUntil, validAfter)
         bytes32 hash = keccak256(abi.encode(
-            userOp.sender,  // Smart Account address
+            payer,         
             token,
             validUntil,
             validAfter
@@ -235,22 +177,17 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
             return ("", _packValidationData(true, validUntil, validAfter));
         }
         
-        // Calculate token cost from ETH cost
         uint256 tokenCost = _calculateTokenCost(token, maxCost);
         
-        // Check user has sufficient stablecoin balance
-        require(IERC20(token).balanceOf(userOp.sender) >= tokenCost, "Paymaster: insufficient balance");
+        require(IERC20(token).balanceOf(payer) >= tokenCost, "Paymaster: insufficient balance");
         
-        // Check allowance (should be set now if permit was executed)
         require(
-            IERC20(token).allowance(userOp.sender, address(this)) >= tokenCost,
+            IERC20(token).allowance(payer, address(this)) >= tokenCost,
             "Paymaster: insufficient allowance"
         );
         
-        // Encode context for postOp
-        context = abi.encode(token, userOp.sender, tokenCost);
+        context = abi.encode(token, payer, tokenCost);
         
-        // Return validation data
         validationData = _packValidationData(false, validUntil, validAfter);
         
         return (context, validationData);
@@ -270,30 +207,22 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         uint256 actualGasCost,
         uint256 actualUserOpFeePerGas
     ) external override onlyEntryPoint {
-        // Decode context
-        (address token, address sender, uint256 maxTokenCost) = abi.decode(
+        (address token, address payer, uint256 maxTokenCost) = abi.decode(
             context,
             (address, address, uint256)
         );
         
-        // Calculate actual token cost (with postOp gas included)
         uint256 actualCostWithPostOp = actualGasCost + (COST_OF_POST * actualUserOpFeePerGas);
         uint256 actualTokenCost = _calculateTokenCost(token, actualCostWithPostOp);
-        
-        // Use smaller of actual cost or max cost
         uint256 tokenCost = actualTokenCost < maxTokenCost ? actualTokenCost : maxTokenCost;
         
-        
-        // Collect fees from user
         if (mode != PostOpMode.postOpReverted) {
-            IERC20(token).safeTransferFrom(sender, address(this), tokenCost);
+            IERC20(token).safeTransferFrom(payer, address(this), tokenCost);
             collectedFees[token] += tokenCost;
             
-            emit GasSponsored(sender, token, tokenCost);
+            emit GasSponsored(payer, token, tokenCost);
         }
     }
-
-    // ============ Deposit Management ============
     
     /**
      * @notice Deposit ETH to EntryPoint for gas sponsorship
@@ -323,8 +252,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     function getDeposit() external view returns (uint256) {
         return entryPoint.balanceOf(address(this));
     }
-
-    // ============ Fee Calculation ============
     
     /**
      * @notice Calculate fee in stablecoin for a given ETH cost
@@ -359,8 +286,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         
         return gasCost;
     }
-
-    // ============ Fee Withdrawal ============
     
     /**
      * @notice Withdraw collected stablecoin fees
@@ -390,8 +315,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     function getCollectedFees(address token) external view returns (uint256) {
         return collectedFees[token];
     }
-
-    // ============ Admin Functions ============
     
     /**
      * @notice Pause contract
@@ -466,8 +389,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         
         emit RegistryUpdated(oldRegistry, _stablecoinRegistry);
     }
-
-    // ============ View Functions ============
     
     /**
      * @notice Check if token is supported
@@ -497,8 +418,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     ) {
         return (MIN_GAS_PRICE, MAX_GAS_PRICE);
     }
-
-    // ============ Internal Functions ============
     
     /**
      * @notice Calculate token cost from ETH cost
@@ -510,10 +429,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         address token,
         uint256 ethCost
     ) internal view returns (uint256 tokenCost) {
-        // Convert ETH to stablecoin via registry
         tokenCost = stablecoinRegistry.ethToToken(token, ethCost);
-        
-        // Apply gas markup (5%)
         tokenCost = tokenCost * (BPS_DENOMINATOR + GAS_MARKUP_BPS) / BPS_DENOMINATOR;
         
         return tokenCost;
@@ -533,8 +449,6 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     ) internal pure returns (uint256) {
         return (sigFailed ? 1 : 0) | (uint256(validUntil) << 160) | (uint256(validAfter) << 208);
     }
-
-    // ============ Emergency Functions ============
     
     /**
      * @notice Emergency withdraw any stuck tokens

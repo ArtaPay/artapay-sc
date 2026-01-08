@@ -27,10 +27,8 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     uint256 public constant PLATFORM_FEE = 30; // 0.3% (30 BPS)
     uint256 public constant BPS_DENOMINATOR = 10000;
 
-    // Replay protection - tracks used nonces
     mapping(bytes32 => bool) public usedNonces;
 
-    // ============ Errors ============
     error InvalidAmount();
     error InvalidToken();
     error InvalidRecipient();
@@ -39,7 +37,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     error NonceAlreadyUsed();
     error DeadlineExpired();
 
-    // ============ Constructor ============
     constructor(
         address _swap,
         address _registry,
@@ -49,10 +46,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         registry = IStablecoinRegistry(_registry);
         feeRecipient = _feeRecipient;
     }
-
-    // ============================================================
-    //                      PAYMENT FLOW
-    // ============================================================
 
     /**
      * @notice Calculate payment cost for a request (pure calculation, no storage read)
@@ -85,7 +78,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         address payToken,
         uint256 maxAmountToPay
     ) external {
-        // Validate request
         if (request.recipient == address(0)) revert InvalidRecipient();
         if (request.requestedAmount == 0) revert InvalidAmount();
         if (request.deadline < block.timestamp) revert DeadlineExpired();
@@ -94,17 +86,14 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
         if (request.merchantSigner == address(0)) revert InvalidSignature();
 
-        // Verify merchant signature
         bytes32 requestHash = _hashPaymentRequest(request);
         bytes32 ethSignedHash = requestHash.toEthSignedMessageHash();
         address recoveredSigner = ethSignedHash.recover(merchantSignature);
 
         if (recoveredSigner != request.merchantSigner) revert InvalidSignature();
 
-        // Mark nonce as used (replay protection)
         usedNonces[request.nonce] = true;
 
-        // Calculate cost
         FeeBreakdown memory cost = _calculateCost(
             request.requestedToken,
             request.requestedAmount,
@@ -113,7 +102,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
 
         if (cost.totalRequired > maxAmountToPay) revert SlippageExceeded();
 
-        // Process payment
         _processPayment(
             msg.sender,
             request.recipient,
@@ -149,10 +137,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         return _hashPaymentRequest(request);
     }
 
-    // ============================================================
-    //                    INTERNAL FUNCTIONS
-    // ============================================================
-
     /**
      * @dev Calculate fee breakdown for a payment
      */
@@ -170,9 +154,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 totalRequired = totalInRequestedToken;
 
         if (needSwap) {
-            // Determine how much payToken is needed to deliver the requested token amount.
-            // Convert rounding can undershoot, so adjust payTokenAmount to ensure swap output
-            // covers the requested amount + platform fee.
             uint256 payTokenAmount = registry.convert(
                 requestedToken,
                 payToken,
@@ -207,7 +188,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
                 }
             }
 
-            // Apply swap fee (0.1% = 10 BPS)
             swapFee = (payTokenAmount * 10) / BPS_DENOMINATOR;
             totalRequired = payTokenAmount + swapFee;
         }
@@ -233,7 +213,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     ) internal {
         bool needSwap = (payToken != requestedToken);
 
-        // Pull tokens from payer
         IERC20(payToken).safeTransferFrom(payer, address(this), cost.totalRequired);
 
         uint256 amountForRecipient = requestedAmount;
@@ -242,7 +221,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         if (needSwap) {
             uint256 baseAmountForSwap = cost.totalRequired - cost.swapFee;
 
-            // Approve and swap
             IERC20(payToken).approve(address(swap), cost.totalRequired);
             swap.swap(
                 baseAmountForSwap,
@@ -252,10 +230,7 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
             );
         }
 
-        // Transfer to merchant
         IERC20(requestedToken).safeTransfer(recipient, amountForRecipient);
-
-        // Transfer platform fee
         IERC20(requestedToken).safeTransfer(feeRecipient, amountForFeeRecipient);
     }
 
@@ -265,8 +240,8 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     function _hashPaymentRequest(PaymentRequest calldata request) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                address(this),           // Include contract address to prevent cross-contract replay
-                block.chainid,           // Include chain ID to prevent cross-chain replay
+                address(this),           
+                block.chainid,           
                 request.recipient,
                 request.requestedToken,
                 request.requestedAmount,
@@ -276,10 +251,6 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
             )
         );
     }
-
-    // ============================================================
-    //                    ADMIN FUNCTIONS
-    // ============================================================
 
     /**
      * @notice Update fee recipient

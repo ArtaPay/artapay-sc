@@ -28,7 +28,6 @@ contract MockEntryPoint {
         return deposits[account];
     }
 
-    // Helper to call postOp on paymaster for testing
     function callPostOp(
         address paymaster,
         PostOpMode mode,
@@ -62,52 +61,38 @@ contract PaymasterTest is Test {
     function setUp() public {
         vm.startPrank(owner);
 
-        // Deploy mock EntryPoint
         entryPoint = new MockEntryPoint();
-
-        // Deploy mock tokens
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
         usdt = new MockStableCoin("Tether USD", "USDT", 6, "US");
         idrx = new MockStableCoin("Rupiah Token", "IDRX", 2, "ID");
         
-        // Deploy Registry
         registry = new StablecoinRegistry();
-        
-        // Register stablecoins with auto-detected decimals
         registry.registerStablecoin(address(usdc), "USDC", "US", 1e8);
         registry.registerStablecoin(address(usdt), "USDT", "US", 1e8);
         registry.registerStablecoin(address(idrx), "IDRX", "ID", 16000e8);
 
-        // Deploy Paymaster
         paymaster = new Paymaster(address(entryPoint), address(registry));
-        
-        // Setup Paymaster
         paymaster.setSupportedToken(address(usdc), true);
         paymaster.setSupportedToken(address(usdt), true);
         paymaster.setSupportedToken(address(idrx), true);
         paymaster.setSigner(signer, true);
         
-        // Deposit ETH to EntryPoint for gas sponsorship
         vm.deal(owner, 100 ether);
         paymaster.deposit{value: 10 ether}();
         
         vm.stopPrank();
 
-        // Fund user
         vm.startPrank(user);
-        usdc.faucet(1000); // 1000 USDC
-        usdt.faucet(1000); // 1000 USDT
-        idrx.mint(user, 20000000 * 10**2); // 20M IDRX (use mint since it exceeds faucet limit)
+        usdc.faucet(1000); 
+        usdt.faucet(1000); 
+        idrx.mint(user, 20000000 * 10**2);
         vm.stopPrank();
     }
-
-    // ============ Test Calculate Fee ============
     
     function testCalculateFee() public {
         uint256 ethCost = 0.01 ether;
         uint256 tokenCost = paymaster.calculateFee(address(usdc), ethCost);
         
-        // Should return cost in USDC with 5% markup
         assertTrue(tokenCost > 0, "Fee should be greater than 0");
         console.log("Fee for 0.01 ETH in USDC:", tokenCost);
     }
@@ -127,18 +112,13 @@ contract PaymasterTest is Test {
         uint256 usdtCost = paymaster.calculateFee(address(usdt), ethCost);
         uint256 idrxCost = paymaster.calculateFee(address(idrx), ethCost);
         
-        // USDC and USDT should be roughly equal (same rate)
-        assertApproxEqRel(usdcCost, usdtCost, 0.01e18); // 1% tolerance
-        
-        // IDRX should be ~16000x more (in smallest units, considering decimals)
+        assertApproxEqRel(usdcCost, usdtCost, 0.01e18);
         assertTrue(idrxCost > usdcCost, "IDRX cost should be higher");
         
         console.log("USDC cost:", usdcCost);
         console.log("USDT cost:", usdtCost);
         console.log("IDRX cost:", idrxCost);
     }
-
-    // ============ Test Estimate Total Cost ============
     
     function testEstimateTotalCost() public {
         uint256 gasLimit = 500000;
@@ -150,13 +130,10 @@ contract PaymasterTest is Test {
             maxFeePerGas
         );
         
-        // Gas cost should be greater than 0
         assertTrue(gasCost > 0, "Gas cost should be greater than 0");
         
         console.log("Gas Cost:", gasCost);
     }
-
-    // ============ Test EntryPoint Deposit Management ============
     
     function testGetDeposit() public {
         uint256 deposit = paymaster.getDeposit();
@@ -187,8 +164,6 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.withdrawFromEntryPoint(payable(unauthorized), 1 ether);
     }
-
-    // ============ Test Token Support ============
     
     function testIsSupportedToken() public {
         assertTrue(paymaster.isSupportedToken(address(usdc)));
@@ -200,16 +175,11 @@ contract PaymasterTest is Test {
     function testSetSupportedToken() public {
         MockStableCoin newToken = new MockStableCoin("New Token", "NEW", 6, "XX");
         
-        // Cannot support unregistered token
         vm.prank(owner);
         vm.expectRevert("Paymaster: token not in registry");
         paymaster.setSupportedToken(address(newToken), true);
-
-        // Register in registry first
         vm.prank(owner);
         registry.registerStablecoin(address(newToken), "NEW", "XX", 1e8);
-
-        // Now can support
         vm.prank(owner);
         paymaster.setSupportedToken(address(newToken), true);
         
@@ -221,8 +191,6 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.setSupportedToken(address(usdc), false);
     }
-
-    // ============ Test Signer Management ============
     
     function testIsAuthorizedSigner() public {
         assertTrue(paymaster.isAuthorizedSigner(owner), "Owner should be authorized");
@@ -247,8 +215,6 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.setSigner(address(6), true);
     }
-
-    // ============ Test Pause Functionality ============
     
     function testPause() public {
         vm.prank(owner);
@@ -273,7 +239,6 @@ contract PaymasterTest is Test {
         paymaster.pause();
     }
 
-    // ============ Test Fee Collection & Withdrawal ============
     
     function testGetCollectedFees() public {
         uint256 fees = paymaster.getCollectedFees(address(usdc));
@@ -281,25 +246,21 @@ contract PaymasterTest is Test {
     }
 
     function testWithdrawFees() public {
-        // First, give user approval and call postOp via entryPoint to collect real fees
-        uint256 feeAmount = 10 * 10**6; // 10 USDC
+        uint256 feeAmount = 10 * 10**6;
         
         vm.prank(user);
         usdc.approve(address(paymaster), feeAmount * 2);
         
-        // Create context for postOp (token, sender, maxTokenCost)
         bytes memory context = abi.encode(address(usdc), user, feeAmount);
         
-        // Call postOp from EntryPoint to collect fees
         entryPoint.callPostOp(
             address(paymaster),
             PostOpMode.opSucceeded,
             context,
-            1000,  // actualGasCost
-            1 gwei // actualUserOpFeePerGas
+            1000, 
+            1 gwei 
         );
         
-        // Verify fees were collected
         assertTrue(paymaster.getCollectedFees(address(usdc)) > 0, "Fees should be collected");
         
         uint256 collectedAmount = paymaster.getCollectedFees(address(usdc));
@@ -317,8 +278,6 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.withdrawFees(address(usdc), 1, unauthorized);
     }
-
-    // ============ Test Registry Integration ============
     
     function testSetStablecoinRegistry() public {
         StablecoinRegistry newRegistry = new StablecoinRegistry();
@@ -334,8 +293,6 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.setStablecoinRegistry(address(0x999));
     }
-
-    // ============ Test Emergency Functions ============
     
     function testEmergencyWithdrawETH() public {
         // Send ETH to paymaster
@@ -368,17 +325,13 @@ contract PaymasterTest is Test {
         vm.expectRevert();
         paymaster.emergencyWithdraw(address(usdc), unauthorized);
     }
-
-    // ============ Test Gas Bounds ============
     
     function testGetGasBounds() public {
         (uint256 minGasPrice, uint256 maxGasPrice) = paymaster.getGasBounds();
         
-        assertEq(minGasPrice, 0.0001 gwei); // MIN_GAS_PRICE = 0.0001 gwei
-        assertEq(maxGasPrice, 1000 gwei);   // MAX_GAS_PRICE = 1000 gwei
+        assertEq(minGasPrice, 0.0001 gwei); 
+        assertEq(maxGasPrice, 1000 gwei);  
     }
-
-    // ============ Test ERC-4337 postOp (Only EntryPoint) ============
     
     function testOnlyEntryPointCanCallPostOp() public {
         bytes memory context = abi.encode(address(usdc), user, 1000);
@@ -388,31 +341,22 @@ contract PaymasterTest is Test {
         paymaster.postOp(PostOpMode.opSucceeded, context, 1000, 1 gwei);
     }
 
-    // ============ Test Integration with Registry ============
     
     function testFeeCalculationUsesRegistryRate() public {
-        // Set ETH rate in registry
         vm.prank(owner);
-        registry.setEthUsdRate(3000e8); // $3000
+        registry.setEthUsdRate(3000e8); 
         
         uint256 ethCost = 0.01 ether;
         uint256 usdcCost = paymaster.calculateFee(address(usdc), ethCost);
         
-        // 0.01 ETH * $3000 = $30
-        // With 5% markup = $31.5
-        // = 31.5 USDC (31.5 * 10^6)
-        
         console.log("USDC cost with $3000 ETH:", usdcCost);
-        assertTrue(usdcCost > 30 * 10**6); // Should be more than $30
-        assertTrue(usdcCost < 32 * 10**6); // Should be less than $32
+        assertTrue(usdcCost > 30 * 10**6); 
+        assertTrue(usdcCost < 32 * 10**6); 
     }
-    // ============ Test Permit Flow ============
     
     function testValidateWithPermitFlow() public {
-        // User has 0 allowance initially
         assertEq(usdc.allowance(user, address(paymaster)), 0);
         
-        // User signs permit off-chain (simulating frontend)
         uint256 deadline = block.timestamp + 1 hours;
         bytes32 permitHash = keccak256(abi.encodePacked(
             "\x19\x01",
@@ -427,32 +371,26 @@ contract PaymasterTest is Test {
             ))
         ));
         
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash); // user = address(2), private key = 2
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash);
         
-        // Build paymasterAndData with permit (ERC-4337 v0.7 format)
-        // Format: [Paymaster 20][VerifGasLimit 16][PostOpGasLimit 16][Token 20][validUntil 6][validAfter 6][hasPermit 1][permit data][sig 65]
         bytes memory paymasterAndData = abi.encodePacked(
-            address(paymaster),                  // 20 bytes
-            uint128(100000),                     // paymasterVerificationGasLimit - 16 bytes
-            uint128(50000),                      // paymasterPostOpGasLimit - 16 bytes
-            address(usdc),                       // 20 bytes
-            uint48(block.timestamp + 1 hours),   // validUntil - 6 bytes
-            uint48(0),                           // validAfter - 6 bytes
-            uint8(1),                            // hasPermit = true - 1 byte
-            bytes32(deadline),                   // permit deadline - 32 bytes
-            v,                                   // 1 byte
-            r,                                   // 32 bytes
-            s,                                   // 32 bytes
-            bytes(hex"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000") // dummy signature - 65 bytes
+            address(paymaster),            
+            uint128(100000),                  
+            uint128(50000),                  
+            address(usdc),                      
+            uint48(block.timestamp + 1 hours),  
+            uint48(0),                         
+            uint8(1),                          
+            bytes32(deadline),                 
+            v,                                 
+            r,                               
+            s,                                
+            bytes(hex"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000") 
         );
         
-        // v0.7 format: 247 bytes (20 + 16 + 16 + 20 + 6 + 6 + 1 + 32 + 1 + 32 + 32 + 65)
         assertTrue(paymasterAndData.length >= 247, "paymasterAndData too short for v0.7");
         assertEq(paymasterAndData.length, 247, "paymasterAndData should be exactly 247 bytes");
-        
-        // After permit is executed, allowance should be max
-        // Note: We can't fully test validatePaymasterUserOp without EntryPoint
-        // but we verified the permit signature generation works
+
         console.log("Permit test: paymasterAndData length =", paymasterAndData.length);
         console.log("Permit v =", v);
     }

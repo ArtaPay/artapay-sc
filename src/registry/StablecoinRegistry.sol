@@ -9,27 +9,23 @@ import "../interfaces/IStablecoinRegistry.sol";
 /**
  * @title StablecoinRegistry
  * @notice Registry for supported stablecoins with hardcoded exchange rates
- * @dev Manages 7 stablecoins: USDC, USDT, IDRX, JPYC, EUROC, MXNT, CNHT
+ * @dev Manages 7 stablecoins: USDC, USDT, IDRX, JPYC, EURC, MXNT, CNHT
  * 
  * Exchange Rate Format:
  * - All rates are stored with 8 decimals precision
  * - Use USD as base curency for convert
  * - Rate represents how many units of the stablecoin equal 1 USD
- * - Examples:
- *   - USDC: 1e8 (1 USDC = 1 USD)
- *   - IDRX: 16000e8 (16,000 IDRX = 1 USD)
- *   - JPYC: 150e8 (150 JPYC = 1 USD)
  */
 contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
-    uint256 public constant RATE_PRECISION = 1e8; // 8 decimal
-    uint256 public constant MIN_RATE_TO_USD = 1e4; // 0.0001 USD minimum
-    uint256 public constant MAX_RATE_TO_USD = 1e16; // 100,000,000 units per USD max
+    uint256 public constant RATE_PRECISION = 1e8; 
+    uint256 public constant MIN_RATE_TO_USD = 1e4;
+    uint256 public constant MAX_RATE_TO_USD = 1e16; 
     uint256 public constant MAX_RATE_CHANGE_BPS = 5000;
-    uint256 public constant BPS_DENOMINATOR = 10000; // basis point denominator
+    uint256 public constant BPS_DENOMINATOR = 10000; 
     uint256 public constant MIN_ETH_USD_RATE = 1000e8;
     uint256 public constant MAX_ETH_USD_RATE = 100000e8;
 
-    /// @notice rate eth ke usd -> $3000 - manual update
+    /// @notice rate eth to usd -> $3000 - manual update
     uint256 public ethUsdRate = 3000e8;
 
     mapping(address => StablecoinInfo) private stablecoins;
@@ -99,7 +95,6 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
             require(rates[i] <= MAX_RATE_TO_USD, "Registry: rate too high");
             require(!isRegistered[tokens[i]], "Registry: token already registered");
             
-            // Auto-detect decimals from token contract
             uint8 tokenDecimals = IERC20Metadata(tokens[i]).decimals();
             
             stablecoins[tokens[i]] = StablecoinInfo({
@@ -136,7 +131,6 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         
         uint256 oldRate = stablecoins[token].rateToUSD;
         
-        // Check rate change limit 
         uint256 maxChange = oldRate * MAX_RATE_CHANGE_BPS / BPS_DENOMINATOR;
         uint256 diff = newRate > oldRate ? newRate - oldRate : oldRate - newRate;
         require(diff <= maxChange, "Registry: rate change too large");
@@ -164,7 +158,6 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
             
             uint256 oldRate = stablecoins[tokens[i]].rateToUSD;
             
-            // Check rate change limit
             uint256 maxChange = oldRate * MAX_RATE_CHANGE_BPS / BPS_DENOMINATOR;
             uint256 diff = newRates[i] > oldRate ? newRates[i] - oldRate : oldRate - newRates[i];
             require(diff <= maxChange, "Registry: rate change too large");
@@ -225,12 +218,8 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         StablecoinInfo memory fromInfo = stablecoins[fromToken];
         StablecoinInfo memory toInfo = stablecoins[toToken];
         
-        // Convert to USD value (with maximum precision)
-        // To avoid precision loss, we use a high precision intermediate
         uint256 usdValue18 = amount * 1e18 * RATE_PRECISION / fromInfo.rateToUSD;
         usdValue18 = usdValue18 * 1e18 / (10 ** fromInfo.decimals) / 1e18;
-        
-        // Convert USD to toToken
         convertedAmount = usdValue18 * toInfo.rateToUSD * (10 ** toInfo.decimals) / RATE_PRECISION / 1e18;
         
         return convertedAmount;
@@ -250,11 +239,8 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         require(isRegistered[token], "Registry: token not registered");
         
         StablecoinInfo memory info = stablecoins[token];
-        
-        // ETH to USD value (8 decimals precision)
         uint256 usdValue = ethAmount * ethUsdRate / 1e18;
-        
-        // USD to token amount
+
         tokenAmount = usdValue * info.rateToUSD * (10 ** info.decimals) / RATE_PRECISION / RATE_PRECISION;
         
         return tokenAmount;
@@ -273,11 +259,8 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         require(isRegistered[token], "Registry: token not registered");
         
         StablecoinInfo memory info = stablecoins[token];
-        
-        // Token to USD value
         uint256 usdValue = tokenAmount * RATE_PRECISION * RATE_PRECISION / info.rateToUSD / (10 ** info.decimals);
         
-        // USD to ETH
         ethAmount = usdValue * 1e18 / ethUsdRate;
         
         return ethAmount;
@@ -307,15 +290,13 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      */
     function getActiveStablecoins() external view returns (address[] memory tokens) {
         uint256 activeCount = 0;
-        
-        // Count active tokens
+
         for (uint256 i = 0; i < registeredTokens.length; i++) {
             if (stablecoins[registeredTokens[i]].isActive) {
                 activeCount++;
             }
         }
-        
-        // Build active tokens array
+
         tokens = new address[](activeCount);
         uint256 index = 0;
         for (uint256 i = 0; i < registeredTokens.length; i++) {
@@ -382,14 +363,12 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     function getStablecoinsByRegion(string calldata region) external view returns (address[] memory tokens) {
         uint256 count = 0;
         
-        // Count tokens in region
         for (uint256 i = 0; i < registeredTokens.length; i++) {
             if (keccak256(bytes(stablecoins[registeredTokens[i]].region)) == keccak256(bytes(region))) {
                 count++;
             }
         }
         
-        // Build tokens array
         tokens = new address[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < registeredTokens.length; i++) {

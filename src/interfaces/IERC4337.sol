@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /**
  * @title ERC-4337 Core Interfaces
  * @notice Standard interfaces required for ERC-4337 Account Abstraction
- * @dev Based on eth-infinitism/account-abstraction
+ * @dev Based on account-abstraction
  */
 
 /// @notice UserOperation structure for ERC-4337
@@ -36,7 +36,7 @@ enum PostOpMode {
 
 /**
  * @title IEntryPoint
- * @notice Minimal interface for ERC-4337 EntryPoint
+ * @notice Standard interface for ERC-4337 EntryPoint
  */
 interface IEntryPoint {
     function handleOps(PackedUserOperation[] calldata ops, address payable beneficiary) external;

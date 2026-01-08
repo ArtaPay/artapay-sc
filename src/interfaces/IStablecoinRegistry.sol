@@ -14,7 +14,7 @@ interface IStablecoinRegistry {
         string symbol;
         uint8 decimals;
         string region;
-        uint256 rateToUSD; // Rate to USD with 8 decimals (ex. 16000 IDR = 16000e8)
+        uint256 rateToUSD;
         bool isActive;
     }
 

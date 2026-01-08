@@ -14,17 +14,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     uint8 private _decimals;
     string public countryCode;
-    
-    // Faucet rate limiting
     uint256 public constant FAUCET_COOLDOWN = 1 days;
-    uint256 public constant MAX_FAUCET_AMOUNT = 10000; // Maximum amount per claim
-    
+    uint256 public constant MAX_FAUCET_AMOUNT = 10000; 
     mapping(address => uint256) public lastFaucetClaim;
     
-    // Events
     event FaucetClaimed(address indexed user, uint256 amount);
     
-    // Errors
     error FaucetCooldownActive(uint256 remainingTime);
     error FaucetAmountExceeded(uint256 requested, uint256 maximum);
 
@@ -33,7 +28,7 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
      * @param name Token name
      * @param symbol Token symbol
      * @param decimals_ Token decimals
-     * @param _countryCode Country code (e.g., "US", "ID", "JP")
+     * @param _countryCode Country code (ex. "US", "ID", "JP")
      */
     constructor(
         string memory name,
@@ -58,7 +53,7 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     }
 
     /**
-     * @notice Mint tokens (public for testing, can be restricted to owner if needed)
+     * @notice Mint tokens (public for testing)
      * @param to Recipient address
      * @param amount Amount to mint
      */
@@ -67,25 +62,21 @@ contract MockStableCoin is ERC20, ERC20Permit, ERC20Burnable, Ownable {
     }
 
     /**
-     * @notice Mint tokens to sender with rate limiting (convenience function for testing)
+     * @notice Mint tokens to sender with rate limiting
      * @param amount Amount to mint (in token units, will be multiplied by decimals)
      */
     function faucet(uint256 amount) external {
-        // Check cooldown period
         uint256 timeSinceLastClaim = block.timestamp - lastFaucetClaim[msg.sender];
         if (lastFaucetClaim[msg.sender] != 0 && timeSinceLastClaim < FAUCET_COOLDOWN) {
             revert FaucetCooldownActive(FAUCET_COOLDOWN - timeSinceLastClaim);
         }
         
-        // Check maximum amount
         if (amount > MAX_FAUCET_AMOUNT) {
             revert FaucetAmountExceeded(amount, MAX_FAUCET_AMOUNT);
         }
         
-        // Update last claim time
         lastFaucetClaim[msg.sender] = block.timestamp;
         
-        // Mint tokens
         uint256 mintAmount = amount * 10 ** _decimals;
         _mint(msg.sender, mintAmount);
         
