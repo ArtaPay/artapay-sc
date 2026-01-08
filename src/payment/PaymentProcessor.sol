@@ -37,11 +37,7 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     error NonceAlreadyUsed();
     error DeadlineExpired();
 
-    constructor(
-        address _swap,
-        address _registry,
-        address _feeRecipient
-    ) Ownable(msg.sender) {
+    constructor(address _swap, address _registry, address _feeRecipient) Ownable(msg.sender) {
         swap = IStableSwap(_swap);
         registry = IStablecoinRegistry(_registry);
         feeRecipient = _feeRecipient;
@@ -53,11 +49,11 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
      * @param requestedAmount Amount the merchant wants
      * @param payToken Token the payer will use
      */
-    function calculatePaymentCost(
-        address requestedToken,
-        uint256 requestedAmount,
-        address payToken
-    ) external view returns (FeeBreakdown memory) {
+    function calculatePaymentCost(address requestedToken, uint256 requestedAmount, address payToken)
+        external
+        view
+        returns (FeeBreakdown memory)
+    {
         if (!registry.isStablecoinActive(requestedToken)) revert InvalidToken();
         if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
 
@@ -94,22 +90,11 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
 
         usedNonces[request.nonce] = true;
 
-        FeeBreakdown memory cost = _calculateCost(
-            request.requestedToken,
-            request.requestedAmount,
-            payToken
-        );
+        FeeBreakdown memory cost = _calculateCost(request.requestedToken, request.requestedAmount, payToken);
 
         if (cost.totalRequired > maxAmountToPay) revert SlippageExceeded();
 
-        _processPayment(
-            msg.sender,
-            request.recipient,
-            payToken,
-            request.requestedToken,
-            request.requestedAmount,
-            cost
-        );
+        _processPayment(msg.sender, request.recipient, payToken, request.requestedToken, request.requestedAmount, cost);
 
         emit PaymentCompleted(
             request.nonce,
@@ -140,11 +125,11 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     /**
      * @dev Calculate fee breakdown for a payment
      */
-    function _calculateCost(
-        address requestedToken,
-        uint256 requestedAmount,
-        address payToken
-    ) internal view returns (FeeBreakdown memory) {
+    function _calculateCost(address requestedToken, uint256 requestedAmount, address payToken)
+        internal
+        view
+        returns (FeeBreakdown memory)
+    {
         bool needSwap = (payToken != requestedToken);
 
         uint256 baseAmount = requestedAmount;
@@ -154,35 +139,21 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         uint256 totalRequired = totalInRequestedToken;
 
         if (needSwap) {
-            uint256 payTokenAmount = registry.convert(
-                requestedToken,
-                payToken,
-                totalInRequestedToken
-            );
+            uint256 payTokenAmount = registry.convert(requestedToken, payToken, totalInRequestedToken);
 
-            uint256 swappedOut = registry.convert(
-                payToken,
-                requestedToken,
-                payTokenAmount
-            );
+            uint256 swappedOut = registry.convert(payToken, requestedToken, payTokenAmount);
             if (swappedOut < totalInRequestedToken) {
                 if (swappedOut == 0) {
                     payTokenAmount += 1;
                 } else {
-                    uint256 adjusted =
-                        (payTokenAmount * totalInRequestedToken + swappedOut - 1) /
-                        swappedOut;
+                    uint256 adjusted = (payTokenAmount * totalInRequestedToken + swappedOut - 1) / swappedOut;
                     if (adjusted <= payTokenAmount) {
                         adjusted = payTokenAmount + 1;
                     }
                     payTokenAmount = adjusted;
                 }
 
-                swappedOut = registry.convert(
-                    payToken,
-                    requestedToken,
-                    payTokenAmount
-                );
+                swappedOut = registry.convert(payToken, requestedToken, payTokenAmount);
                 if (swappedOut < totalInRequestedToken) {
                     payTokenAmount += 1;
                 }
@@ -193,10 +164,7 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
         }
 
         return FeeBreakdown({
-            baseAmount: baseAmount,
-            platformFee: platformFee,
-            swapFee: swapFee,
-            totalRequired: totalRequired
+            baseAmount: baseAmount, platformFee: platformFee, swapFee: swapFee, totalRequired: totalRequired
         });
     }
 
@@ -222,12 +190,7 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
             uint256 baseAmountForSwap = cost.totalRequired - cost.swapFee;
 
             IERC20(payToken).approve(address(swap), cost.totalRequired);
-            swap.swap(
-                baseAmountForSwap,
-                payToken,
-                requestedToken,
-                requestedAmount + amountForFeeRecipient
-            );
+            swap.swap(baseAmountForSwap, payToken, requestedToken, requestedAmount + amountForFeeRecipient);
         }
 
         IERC20(requestedToken).safeTransfer(recipient, amountForRecipient);
@@ -240,8 +203,8 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     function _hashPaymentRequest(PaymentRequest calldata request) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                address(this),           
-                block.chainid,           
+                address(this),
+                block.chainid,
                 request.recipient,
                 request.requestedToken,
                 request.requestedAmount,

@@ -53,15 +53,9 @@ contract SimpleAccountFactory {
      * @return Predicted address of the account
      */
     function getAddress(address owner, uint256 salt) public view returns (address) {
-        bytes32 bytecodeHash = keccak256(
-            abi.encodePacked(
-                type(SimpleAccount).creationCode,
-                abi.encode(entryPoint, owner)
-            )
-        );
-        bytes32 _data = keccak256(
-            abi.encodePacked(bytes1(0xff), address(this), bytes32(salt), bytecodeHash)
-        );
+        bytes32 bytecodeHash =
+            keccak256(abi.encodePacked(type(SimpleAccount).creationCode, abi.encode(entryPoint, owner)));
+        bytes32 _data = keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(salt), bytecodeHash));
         return address(uint160(uint256(_data)));
     }
 

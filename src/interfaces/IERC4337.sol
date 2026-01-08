@@ -44,7 +44,10 @@ interface IEntryPoint {
     function getNonce(address sender, uint192 key) external view returns (uint256);
     function depositTo(address account) external payable;
     function withdrawTo(address payable withdrawAddress, uint256 withdrawAmount) external;
-    function getDepositInfo(address account) external view returns (uint256 deposit, bool staked, uint112 stake, uint32 unstakeDelaySec, uint48 withdrawTime);
+    function getDepositInfo(address account)
+        external
+        view
+        returns (uint256 deposit, bool staked, uint112 stake, uint32 unstakeDelaySec, uint48 withdrawTime);
     function balanceOf(address account) external view returns (uint256);
 }
 
@@ -62,11 +65,9 @@ interface IPaymaster {
      * @return context - Context to pass to postOp (can be empty)
      * @return validationData - Packed validation data (sigFailed, validUntil, validAfter)
      */
-    function validatePaymasterUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 maxCost
-    ) external returns (bytes memory context, uint256 validationData);
+    function validatePaymasterUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 maxCost)
+        external
+        returns (bytes memory context, uint256 validationData);
 
     /**
      * @notice Post-operation handler (called after UserOp execution)
@@ -75,12 +76,8 @@ interface IPaymaster {
      * @param actualGasCost - Actual gas cost used
      * @param actualUserOpFeePerGas - Actual fee per gas
      */
-    function postOp(
-        PostOpMode mode,
-        bytes calldata context,
-        uint256 actualGasCost,
-        uint256 actualUserOpFeePerGas
-    ) external;
+    function postOp(PostOpMode mode, bytes calldata context, uint256 actualGasCost, uint256 actualUserOpFeePerGas)
+        external;
 }
 
 /**
@@ -95,9 +92,7 @@ interface IAccount {
      * @param missingAccountFunds - Amount to deposit to EntryPoint
      * @return validationData - Packed validation data
      */
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
-    ) external returns (uint256 validationData);
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
+        external
+        returns (uint256 validationData);
 }

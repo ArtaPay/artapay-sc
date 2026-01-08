@@ -21,13 +21,7 @@ interface IStablecoinRegistry {
     /**
      * @notice Emitted when a stablecoin is registered
      */
-    event StablecoinRegistered(
-        address indexed token,
-        string symbol,
-        uint8 decimals,
-        string region,
-        uint256 rateToUSD
-    );
+    event StablecoinRegistered(address indexed token, string symbol, uint8 decimals, string region, uint256 rateToUSD);
 
     /**
      * @notice Emitted when a stablecoin rate is updated
@@ -60,11 +54,7 @@ interface IStablecoinRegistry {
      * @param amount Amount to convert (in fromToken decimals)
      * @return convertedAmount Amount in destination token decimals
      */
-    function convert(
-        address fromToken,
-        address toToken,
-        uint256 amount
-    ) external view returns (uint256 convertedAmount);
+    function convert(address fromToken, address toToken, uint256 amount) external view returns (uint256 convertedAmount);
 
     /**
      * @notice Convert ETH amount to stablecoin
@@ -72,10 +62,7 @@ interface IStablecoinRegistry {
      * @param ethAmount Amount in wei
      * @return tokenAmount Amount in token decimals
      */
-    function ethToToken(
-        address token,
-        uint256 ethAmount
-    ) external view returns (uint256 tokenAmount);
+    function ethToToken(address token, uint256 ethAmount) external view returns (uint256 tokenAmount);
 
     /**
      * @notice Get all registered stablecoins

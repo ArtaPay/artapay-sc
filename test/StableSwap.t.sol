@@ -18,9 +18,9 @@ contract StableSwapTest is Test {
     address public user1 = address(0x1);
     address public user2 = address(0x2);
 
-    uint256 constant USDC_RATE = 1e8; 
+    uint256 constant USDC_RATE = 1e8;
     uint256 constant IDRX_RATE = 16000e8;
-    uint256 constant JPYC_RATE = 150e8; 
+    uint256 constant JPYC_RATE = 150e8;
 
     function setUp() public {
         registry = new StablecoinRegistry();
@@ -34,18 +34,18 @@ contract StableSwapTest is Test {
 
         usdc.mint(owner, 1000000 * 10 ** 6);
         idrx.mint(owner, 16000000000 * 10 ** 2);
-        jpyc.mint(owner, 150000000 * 10 ** 18); 
+        jpyc.mint(owner, 150000000 * 10 ** 18);
 
-        usdc.mint(user1, 10000 * 10 ** 6); 
-        idrx.mint(user1, 160000000 * 10 ** 2); 
+        usdc.mint(user1, 10000 * 10 ** 6);
+        idrx.mint(user1, 160000000 * 10 ** 2);
 
         usdc.approve(address(stableSwap), type(uint256).max);
         idrx.approve(address(stableSwap), type(uint256).max);
         jpyc.approve(address(stableSwap), type(uint256).max);
 
-        stableSwap.deposit(address(usdc), 100000 * 10 ** 6); 
-        stableSwap.deposit(address(idrx), 1600000000 * 10 ** 2); 
-        stableSwap.deposit(address(jpyc), 15000000 * 10 ** 18); 
+        stableSwap.deposit(address(usdc), 100000 * 10 ** 6);
+        stableSwap.deposit(address(idrx), 1600000000 * 10 ** 2);
+        stableSwap.deposit(address(jpyc), 15000000 * 10 ** 18);
     }
 
     function test_Deposit() public {
@@ -54,10 +54,7 @@ contract StableSwapTest is Test {
 
         stableSwap.deposit(address(usdc), depositAmount);
 
-        assertEq(
-            stableSwap.reserves(address(usdc)),
-            initialReserve + depositAmount
-        );
+        assertEq(stableSwap.reserves(address(usdc)), initialReserve + depositAmount);
     }
 
     function test_Deposit_RevertIfNotOwner() public {
@@ -77,10 +74,7 @@ contract StableSwapTest is Test {
 
         stableSwap.withdraw(address(usdc), withdrawAmount);
 
-        assertEq(
-            stableSwap.reserves(address(usdc)),
-            initialReserve - withdrawAmount
-        );
+        assertEq(stableSwap.reserves(address(usdc)), initialReserve - withdrawAmount);
     }
 
     function test_Withdraw_RevertIfInsufficientBalance() public {
@@ -91,10 +85,10 @@ contract StableSwapTest is Test {
     }
 
     function test_GetSwapQuote_SameValue() public view {
-        uint256 amountIn = 1600000 * 10 ** 2; 
+        uint256 amountIn = 1600000 * 10 ** 2;
 
-        (uint256 amountOut, uint256 fee, uint256 totalUserPays) = stableSwap
-            .getSwapQuote(address(idrx), address(usdc), amountIn);
+        (uint256 amountOut, uint256 fee, uint256 totalUserPays) =
+            stableSwap.getSwapQuote(address(idrx), address(usdc), amountIn);
 
         assertEq(fee, (amountIn * 10) / 10000);
 
@@ -105,10 +99,10 @@ contract StableSwapTest is Test {
     }
 
     function test_Swap_IDRX_to_USDC() public {
-        uint256 amountIn = 1600000 * 10 ** 2; 
+        uint256 amountIn = 1600000 * 10 ** 2;
 
-        (uint256 expectedOut, uint256 fee, uint256 totalPay) = stableSwap
-            .getSwapQuote(address(idrx), address(usdc), amountIn);
+        (uint256 expectedOut, uint256 fee, uint256 totalPay) =
+            stableSwap.getSwapQuote(address(idrx), address(usdc), amountIn);
 
         vm.startPrank(user1);
         idrx.approve(address(stableSwap), totalPay);
@@ -116,12 +110,7 @@ contract StableSwapTest is Test {
         uint256 userUsdcBefore = usdc.balanceOf(user1);
         uint256 userIdrxBefore = idrx.balanceOf(user1);
 
-        uint256 amountOut = stableSwap.swap(
-            amountIn,
-            address(idrx),
-            address(usdc),
-            expectedOut
-        );
+        uint256 amountOut = stableSwap.swap(amountIn, address(idrx), address(usdc), expectedOut);
 
         vm.stopPrank();
 
@@ -138,13 +127,13 @@ contract StableSwapTest is Test {
         idrx.approve(address(stableSwap), type(uint256).max);
 
         vm.expectRevert(StableSwap.SlippageExceeded.selector);
-        stableSwap.swap(amountIn, address(idrx), address(usdc), 1000 * 10 ** 6); 
+        stableSwap.swap(amountIn, address(idrx), address(usdc), 1000 * 10 ** 6);
 
         vm.stopPrank();
     }
 
     function test_Swap_RevertIfInsufficientReserve() public {
-        uint256 hugeAmount = 100000000000 * 10 ** 2; 
+        uint256 hugeAmount = 100000000000 * 10 ** 2;
 
         vm.startPrank(user1);
         idrx.mint(user1, hugeAmount);

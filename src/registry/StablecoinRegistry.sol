@@ -10,18 +10,18 @@ import "../interfaces/IStablecoinRegistry.sol";
  * @title StablecoinRegistry
  * @notice Registry for supported stablecoins with hardcoded exchange rates
  * @dev Manages 7 stablecoins: USDC, USDT, IDRX, JPYC, EURC, MXNT, CNHT
- * 
+ *
  * Exchange Rate Format:
  * - All rates are stored with 8 decimals precision
  * - Use USD as base curency for convert
  * - Rate represents how many units of the stablecoin equal 1 USD
  */
 contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
-    uint256 public constant RATE_PRECISION = 1e8; 
+    uint256 public constant RATE_PRECISION = 1e8;
     uint256 public constant MIN_RATE_TO_USD = 1e4;
-    uint256 public constant MAX_RATE_TO_USD = 1e16; 
+    uint256 public constant MAX_RATE_TO_USD = 1e16;
     uint256 public constant MAX_RATE_CHANGE_BPS = 5000;
-    uint256 public constant BPS_DENOMINATOR = 10000; 
+    uint256 public constant BPS_DENOMINATOR = 10000;
     uint256 public constant MIN_ETH_USD_RATE = 1000e8;
     uint256 public constant MAX_ETH_USD_RATE = 100000e8;
 
@@ -35,16 +35,14 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     event EthUsdRateUpdated(uint256 oldRate, uint256 newRate);
 
     /**
-    * @notice Initialize the registry
-    */
+     * @notice Initialize the registry
+     */
     constructor() Ownable(msg.sender) {}
 
-    function registerStablecoin (
-        address token,
-        string calldata symbol,
-        string calldata region,
-        uint256 rateToUSD
-    ) external onlyOwner {
+    function registerStablecoin(address token, string calldata symbol, string calldata region, uint256 rateToUSD)
+        external
+        onlyOwner
+    {
         require(token != address(0), "Registry: invalid token address");
         require(rateToUSD >= MIN_RATE_TO_USD, "Registry: rate too low");
         require(rateToUSD <= MAX_RATE_TO_USD, "Registry: rate too high");
@@ -63,10 +61,10 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
             rateToUSD: rateToUSD,
             isActive: true
         });
-        
+
         registeredTokens.push(token);
         isRegistered[token] = true;
-        
+
         emit StablecoinRegistered(token, symbol, tokenDecimals, region, rateToUSD);
     }
 
@@ -84,9 +82,7 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         uint256[] calldata rates
     ) external onlyOwner {
         require(
-            tokens.length == symbols.length &&
-            tokens.length == regions.length &&
-            tokens.length == rates.length,
+            tokens.length == symbols.length && tokens.length == regions.length && tokens.length == rates.length,
             "Registry: array length mismatch"
         );
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -94,9 +90,9 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
             require(rates[i] >= MIN_RATE_TO_USD, "Registry: rate too low");
             require(rates[i] <= MAX_RATE_TO_USD, "Registry: rate too high");
             require(!isRegistered[tokens[i]], "Registry: token already registered");
-            
+
             uint8 tokenDecimals = IERC20Metadata(tokens[i]).decimals();
-            
+
             stablecoins[tokens[i]] = StablecoinInfo({
                 tokenAddress: tokens[i],
                 symbol: symbols[i],
@@ -105,17 +101,11 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
                 rateToUSD: rates[i],
                 isActive: true
             });
-            
+
             registeredTokens.push(tokens[i]);
             isRegistered[tokens[i]] = true;
-            
-            emit StablecoinRegistered(
-                tokens[i], 
-                symbols[i], 
-                tokenDecimals, 
-                regions[i], 
-                rates[i]
-            );
+
+            emit StablecoinRegistered(tokens[i], symbols[i], tokenDecimals, regions[i], rates[i]);
         }
     }
 
@@ -128,15 +118,15 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
         require(isRegistered[token], "Registry: token not registered");
         require(newRate >= MIN_RATE_TO_USD, "Registry: rate too low");
         require(newRate <= MAX_RATE_TO_USD, "Registry: rate too high");
-        
+
         uint256 oldRate = stablecoins[token].rateToUSD;
-        
+
         uint256 maxChange = oldRate * MAX_RATE_CHANGE_BPS / BPS_DENOMINATOR;
         uint256 diff = newRate > oldRate ? newRate - oldRate : oldRate - newRate;
         require(diff <= maxChange, "Registry: rate change too large");
-        
+
         stablecoins[token].rateToUSD = newRate;
-        
+
         emit RateUpdated(token, oldRate, newRate);
     }
 
@@ -145,25 +135,22 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      * @param tokens Array token addresse
      * @param newRates Array new rates
      */
-    function batchUpdateRates(
-        address[] calldata tokens,
-        uint256[] calldata newRates
-    ) external onlyOwner {
+    function batchUpdateRates(address[] calldata tokens, uint256[] calldata newRates) external onlyOwner {
         require(tokens.length == newRates.length, "Registry: array length mismatch");
-        
+
         for (uint256 i = 0; i < tokens.length; i++) {
             require(isRegistered[tokens[i]], "Registry: token not registered");
             require(newRates[i] >= MIN_RATE_TO_USD, "Registry: rate too low");
             require(newRates[i] <= MAX_RATE_TO_USD, "Registry: rate too high");
-            
+
             uint256 oldRate = stablecoins[tokens[i]].rateToUSD;
-            
+
             uint256 maxChange = oldRate * MAX_RATE_CHANGE_BPS / BPS_DENOMINATOR;
             uint256 diff = newRates[i] > oldRate ? newRates[i] - oldRate : oldRate - newRates[i];
             require(diff <= maxChange, "Registry: rate change too large");
-            
+
             stablecoins[tokens[i]].rateToUSD = newRates[i];
-            
+
             emit RateUpdated(tokens[i], oldRate, newRates[i]);
         }
     }
@@ -175,9 +162,9 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      */
     function setStablecoinStatus(address token, bool isActive) external onlyOwner {
         require(isRegistered[token], "Registry: token not registered");
-        
+
         stablecoins[token].isActive = isActive;
-        
+
         emit StablecoinStatusUpdated(token, isActive);
     }
 
@@ -188,10 +175,10 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     function setEthUsdRate(uint256 newRate) external onlyOwner {
         require(newRate >= MIN_ETH_USD_RATE, "Registry: rate too low");
         require(newRate <= MAX_ETH_USD_RATE, "Registry: rate too high");
-        
+
         uint256 oldRate = ethUsdRate;
         ethUsdRate = newRate;
-        
+
         emit EthUsdRateUpdated(oldRate, newRate);
     }
 
@@ -203,25 +190,27 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      * @param amount Amount to convert (in fromToken decimals)
      * @return convertedAmount Amount in destination token decimals
      */
-    function convert(
-        address fromToken,
-        address toToken,
-        uint256 amount
-    ) external view override whenNotPaused returns (uint256 convertedAmount) {
+    function convert(address fromToken, address toToken, uint256 amount)
+        external
+        view
+        override
+        whenNotPaused
+        returns (uint256 convertedAmount)
+    {
         require(isRegistered[fromToken], "Registry: fromToken not registered");
         require(isRegistered[toToken], "Registry: toToken not registered");
-        
+
         if (fromToken == toToken) {
             return amount;
         }
-        
+
         StablecoinInfo memory fromInfo = stablecoins[fromToken];
         StablecoinInfo memory toInfo = stablecoins[toToken];
-        
+
         uint256 usdValue18 = amount * 1e18 * RATE_PRECISION / fromInfo.rateToUSD;
         usdValue18 = usdValue18 * 1e18 / (10 ** fromInfo.decimals) / 1e18;
         convertedAmount = usdValue18 * toInfo.rateToUSD * (10 ** toInfo.decimals) / RATE_PRECISION / 1e18;
-        
+
         return convertedAmount;
     }
 
@@ -232,17 +221,20 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      * @param ethAmount Amount in wei (18 decimals)
      * @return tokenAmount Amount in token decimals
      */
-    function ethToToken(
-        address token,
-        uint256 ethAmount
-    ) external view override whenNotPaused returns (uint256 tokenAmount) {
+    function ethToToken(address token, uint256 ethAmount)
+        external
+        view
+        override
+        whenNotPaused
+        returns (uint256 tokenAmount)
+    {
         require(isRegistered[token], "Registry: token not registered");
-        
+
         StablecoinInfo memory info = stablecoins[token];
         uint256 usdValue = ethAmount * ethUsdRate / 1e18;
 
         tokenAmount = usdValue * info.rateToUSD * (10 ** info.decimals) / RATE_PRECISION / RATE_PRECISION;
-        
+
         return tokenAmount;
     }
 
@@ -252,17 +244,14 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      * @param tokenAmount Amount in token decimals
      * @return ethAmount Amount in wei
      */
-    function tokenToEth(
-        address token,
-        uint256 tokenAmount
-    ) external view whenNotPaused returns (uint256 ethAmount) {
+    function tokenToEth(address token, uint256 tokenAmount) external view whenNotPaused returns (uint256 ethAmount) {
         require(isRegistered[token], "Registry: token not registered");
-        
+
         StablecoinInfo memory info = stablecoins[token];
         uint256 usdValue = tokenAmount * RATE_PRECISION * RATE_PRECISION / info.rateToUSD / (10 ** info.decimals);
-        
+
         ethAmount = usdValue * 1e18 / ethUsdRate;
-        
+
         return ethAmount;
     }
 
@@ -305,7 +294,7 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
                 index++;
             }
         }
-        
+
         return tokens;
     }
 
@@ -336,22 +325,18 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      * @return fromRate Source token rate to USD
      * @return toRate Destination token rate to USD
      */
-    function getConversionQuote(
-        address fromToken,
-        address toToken,
-        uint256 amount
-    ) external view returns (
-        uint256 toAmount,
-        uint256 fromRate,
-        uint256 toRate
-    ) {
+    function getConversionQuote(address fromToken, address toToken, uint256 amount)
+        external
+        view
+        returns (uint256 toAmount, uint256 fromRate, uint256 toRate)
+    {
         require(isRegistered[fromToken], "Registry: fromToken not registered");
         require(isRegistered[toToken], "Registry: toToken not registered");
-        
+
         fromRate = stablecoins[fromToken].rateToUSD;
         toRate = stablecoins[toToken].rateToUSD;
         toAmount = this.convert(fromToken, toToken, amount);
-        
+
         return (toAmount, fromRate, toRate);
     }
 
@@ -362,13 +347,13 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
      */
     function getStablecoinsByRegion(string calldata region) external view returns (address[] memory tokens) {
         uint256 count = 0;
-        
+
         for (uint256 i = 0; i < registeredTokens.length; i++) {
             if (keccak256(bytes(stablecoins[registeredTokens[i]].region)) == keccak256(bytes(region))) {
                 count++;
             }
         }
-        
+
         tokens = new address[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < registeredTokens.length; i++) {
@@ -377,20 +362,24 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
                 index++;
             }
         }
-        
+
         return tokens;
     }
 
     /**
      * @notice Get rate bounds for transparency
      */
-    function getRateBounds() external pure returns (
-        uint256 minRateToUsd,
-        uint256 maxRateToUsd,
-        uint256 maxChangeBps,
-        uint256 minEthRate,
-        uint256 maxEthRate
-    ) {
+    function getRateBounds()
+        external
+        pure
+        returns (
+            uint256 minRateToUsd,
+            uint256 maxRateToUsd,
+            uint256 maxChangeBps,
+            uint256 minEthRate,
+            uint256 maxEthRate
+        )
+    {
         return (MIN_RATE_TO_USD, MAX_RATE_TO_USD, MAX_RATE_CHANGE_BPS, MIN_ETH_USD_RATE, MAX_ETH_USD_RATE);
     }
 

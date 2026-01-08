@@ -8,7 +8,12 @@ pragma solidity ^0.8.20;
  */
 interface IPaymentProcessor {
     /// @notice Payment status enum
-    enum PaymentStatus { Pending, Completed, Cancelled, Expired }
+    enum PaymentStatus {
+        Pending,
+        Completed,
+        Cancelled,
+        Expired
+    }
 
     /**
      * @notice Payment request data signed by merchant off-chain
@@ -20,12 +25,12 @@ interface IPaymentProcessor {
      * @param merchantSigner EOA that signs off-chain request
      */
     struct PaymentRequest {
-        address recipient;       
-        address requestedToken;  
-        uint256 requestedAmount; 
-        uint256 deadline;       
-        bytes32 nonce;           
-        address merchantSigner;  
+        address recipient;
+        address requestedToken;
+        uint256 requestedAmount;
+        uint256 deadline;
+        bytes32 nonce;
+        address merchantSigner;
     }
 
     /**
@@ -37,9 +42,9 @@ interface IPaymentProcessor {
      */
     struct FeeBreakdown {
         uint256 baseAmount;
-        uint256 platformFee;    
-        uint256 swapFee;        
-        uint256 totalRequired; 
+        uint256 platformFee;
+        uint256 swapFee;
+        uint256 totalRequired;
     }
 
     /**
@@ -69,11 +74,10 @@ interface IPaymentProcessor {
      * @param payToken Token customer will pay with
      * @return Fee breakdown showing total cost
      */
-    function calculatePaymentCost(
-        address requestedToken,
-        uint256 requestedAmount,
-        address payToken
-    ) external view returns (FeeBreakdown memory);
+    function calculatePaymentCost(address requestedToken, uint256 requestedAmount, address payToken)
+        external
+        view
+        returns (FeeBreakdown memory);
 
     /**
      * @notice Execute payment with merchant's off-chain signature

@@ -16,7 +16,9 @@ interface IStableSwap {
      * @param amountOut Amount output token received
      * @param fee Fee charged the swap
      */
-    event Swap(address indexed user, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee);
+    event Swap(
+        address indexed user, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee
+    );
 
     /**
      * @notice Execute token swap
@@ -26,7 +28,9 @@ interface IStableSwap {
      * @param minAmountOut Minimum amount output token to receive (slippage protection)
      * @return amountOut Actual amount of output token received
      */
-    function swap(uint256 amountIn, address tokenIn, address tokenOut, uint256 minAmountOut) external returns (uint256 amountOut);
+    function swap(uint256 amountIn, address tokenIn, address tokenOut, uint256 minAmountOut)
+        external
+        returns (uint256 amountOut);
 
     /**
      * @notice Get a quote for a swap without executing
@@ -37,8 +41,11 @@ interface IStableSwap {
      * @return fee Fee charged for swap
      * @return totalUserPays Total amount user needs to pay (amountIn + fee)
      */
-    function getSwapQuote(address tokenIn, address tokenOut, uint256 amountIn) external view returns (uint256 amountOut, uint256 fee, uint256 totalUserPays);
-    
+    function getSwapQuote(address tokenIn, address tokenOut, uint256 amountIn)
+        external
+        view
+        returns (uint256 amountOut, uint256 fee, uint256 totalUserPays);
+
     /**
      * @notice Get the liquidity reserve for a specific token
      * @param token Address of the token to query

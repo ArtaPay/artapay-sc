@@ -73,11 +73,12 @@ contract SimpleAccount is IAccount {
      * @param missingAccountFunds Funds needed in EntryPoint
      * @return validationData Validation result (0 = success)
      */
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
-    ) external override onlyEntryPoint returns (uint256 validationData) {
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
+        external
+        override
+        onlyEntryPoint
+        returns (uint256 validationData)
+    {
         _validateSignature(userOpHash, userOp.signature);
 
         if (missingAccountFunds > 0) {
