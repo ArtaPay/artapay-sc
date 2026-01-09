@@ -111,7 +111,6 @@ Factory for deploying deterministic smart accounts using CREATE2.
 
 | Fee Type       | Rate          | Paid By | Token      |
 | -------------- | ------------- | ------- | ---------- |
-| Gas Fee Markup | 5% (500 BPS)  | Payer   | Stablecoin |
 | Platform Fee   | 0.3% (30 BPS) | Payer   | Stablecoin |
 | Swap Fee       | 0.1% (10 BPS) | User    | Stablecoin |
 

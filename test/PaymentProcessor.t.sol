@@ -68,6 +68,57 @@ contract PaymentProcessorTest is Test {
         vm.stopPrank();
     }
 
+    function _makeNonce(string memory seed) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(seed));
+    }
+
+    function _buildRequest(
+        address requestedToken,
+        uint256 requestedAmount,
+        bytes32 nonce,
+        uint256 deadline
+    ) internal view returns (IPaymentProcessor.PaymentRequest memory) {
+        return IPaymentProcessor.PaymentRequest({
+            recipient: merchant,
+            requestedToken: requestedToken,
+            requestedAmount: requestedAmount,
+            deadline: deadline,
+            nonce: nonce,
+            merchantSigner: merchant
+        });
+    }
+
+    function _hashRequest(IPaymentProcessor.PaymentRequest memory request)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                address(processor),
+                block.chainid,
+                request.recipient,
+                request.requestedToken,
+                request.requestedAmount,
+                request.deadline,
+                request.nonce,
+                request.merchantSigner
+            )
+        );
+    }
+
+    function _signRequest(
+        IPaymentProcessor.PaymentRequest memory request,
+        uint256 signerKey
+    ) internal returns (bytes memory) {
+        bytes32 requestHash = _hashRequest(request);
+        bytes32 ethSignedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, ethSignedHash);
+        return abi.encodePacked(r, s, v);
+    }
+
     function testDeployment() public {
         assertEq(address(processor.swap()), address(swap));
         assertEq(address(processor.registry()), address(registry));
@@ -103,32 +154,9 @@ contract PaymentProcessorTest is Test {
     function testExecutePaymentSameToken() public {
         uint256 requestedAmount = 100 * 10 ** 6;
         uint256 deadline = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256(abi.encodePacked("unique-nonce-1"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(merchantPrivateKey, ethSignedHash);
-        bytes memory merchantSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("unique-nonce-1"), deadline);
+        bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         IPaymentProcessor.FeeBreakdown memory cost =
             processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdc));
@@ -141,12 +169,9 @@ contract PaymentProcessorTest is Test {
 
         processor.executePayment(request, merchantSignature, address(usdc), cost.totalRequired);
 
-        uint256 merchantBalanceAfter = usdc.balanceOf(merchant);
-        uint256 feeRecipientBalanceAfter = usdc.balanceOf(feeRecipient);
-
-        assertEq(merchantBalanceAfter - merchantBalanceBefore, requestedAmount);
-        assertEq(feeRecipientBalanceAfter - feeRecipientBalanceBefore, cost.platformFee);
-        assertTrue(processor.usedNonces(nonce));
+        assertEq(usdc.balanceOf(merchant) - merchantBalanceBefore, requestedAmount);
+        assertEq(usdc.balanceOf(feeRecipient) - feeRecipientBalanceBefore, cost.platformFee);
+        assertTrue(processor.usedNonces(request.nonce));
 
         vm.stopPrank();
     }
@@ -154,32 +179,9 @@ contract PaymentProcessorTest is Test {
     function testExecutePaymentCrossToken() public {
         uint256 requestedAmount = 100 * 10 ** 6;
         uint256 deadline = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256(abi.encodePacked("cross-token-nonce"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(merchantPrivateKey, ethSignedHash);
-        bytes memory merchantSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("cross-token-nonce"), deadline);
+        bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         IPaymentProcessor.FeeBreakdown memory cost =
             processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdt));
@@ -191,9 +193,7 @@ contract PaymentProcessorTest is Test {
 
         processor.executePayment(request, merchantSignature, address(usdt), cost.totalRequired);
 
-        uint256 merchantBalanceAfter = usdc.balanceOf(merchant);
-
-        assertEq(merchantBalanceAfter - merchantBalanceBefore, requestedAmount);
+        assertEq(usdc.balanceOf(merchant) - merchantBalanceBefore, requestedAmount);
 
         vm.stopPrank();
     }
@@ -201,32 +201,9 @@ contract PaymentProcessorTest is Test {
     function testReplayProtection() public {
         uint256 requestedAmount = 50 * 10 ** 6;
         uint256 deadline = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256(abi.encodePacked("replay-test"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(merchantPrivateKey, ethSignedHash);
-        bytes memory merchantSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("replay-test"), deadline);
+        bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         IPaymentProcessor.FeeBreakdown memory cost =
             processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdc));
@@ -244,32 +221,9 @@ contract PaymentProcessorTest is Test {
     function testExpiredDeadline() public {
         uint256 requestedAmount = 50 * 10 ** 6;
         uint256 deadline = block.timestamp - 1; // Already expired
-        bytes32 nonce = keccak256(abi.encodePacked("expired-test"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(merchantPrivateKey, ethSignedHash);
-        bytes memory merchantSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("expired-test"), deadline);
+        bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         vm.startPrank(payer);
         vm.expectRevert(PaymentProcessor.DeadlineExpired.selector);
@@ -280,32 +234,9 @@ contract PaymentProcessorTest is Test {
     function testInvalidSignature() public {
         uint256 requestedAmount = 50 * 10 ** 6;
         uint256 deadline = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256(abi.encodePacked("invalid-sig"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPrivateKey, ethSignedHash); // Wrong signer
-        bytes memory invalidSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("invalid-sig"), deadline);
+        bytes memory invalidSignature = _signRequest(request, payerPrivateKey); // Wrong signer
 
         vm.startPrank(payer);
         vm.expectRevert(PaymentProcessor.InvalidSignature.selector);
@@ -316,32 +247,9 @@ contract PaymentProcessorTest is Test {
     function testSlippageProtection() public {
         uint256 requestedAmount = 100 * 10 ** 6;
         uint256 deadline = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256(abi.encodePacked("slippage-test"));
-
-        IPaymentProcessor.PaymentRequest memory request = IPaymentProcessor.PaymentRequest({
-            recipient: merchant,
-            requestedToken: address(usdc),
-            requestedAmount: requestedAmount,
-            deadline: deadline,
-            nonce: nonce,
-            merchantSigner: merchant
-        });
-
-        bytes32 requestHash = keccak256(
-            abi.encode(
-                address(processor),
-                block.chainid,
-                request.recipient,
-                request.requestedToken,
-                request.requestedAmount,
-                request.deadline,
-                request.nonce,
-                request.merchantSigner
-            )
-        );
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(merchantPrivateKey, ethSignedHash);
-        bytes memory merchantSignature = abi.encodePacked(r, s, v);
+        IPaymentProcessor.PaymentRequest memory request =
+            _buildRequest(address(usdc), requestedAmount, _makeNonce("slippage-test"), deadline);
+        bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         IPaymentProcessor.FeeBreakdown memory cost =
             processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdc));
