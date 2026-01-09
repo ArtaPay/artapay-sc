@@ -72,12 +72,11 @@ contract PaymentProcessorTest is Test {
         return keccak256(abi.encodePacked(seed));
     }
 
-    function _buildRequest(
-        address requestedToken,
-        uint256 requestedAmount,
-        bytes32 nonce,
-        uint256 deadline
-    ) internal view returns (IPaymentProcessor.PaymentRequest memory) {
+    function _buildRequest(address requestedToken, uint256 requestedAmount, bytes32 nonce, uint256 deadline)
+        internal
+        view
+        returns (IPaymentProcessor.PaymentRequest memory)
+    {
         return IPaymentProcessor.PaymentRequest({
             recipient: merchant,
             requestedToken: requestedToken,
@@ -88,11 +87,7 @@ contract PaymentProcessorTest is Test {
         });
     }
 
-    function _hashRequest(IPaymentProcessor.PaymentRequest memory request)
-        internal
-        view
-        returns (bytes32)
-    {
+    function _hashRequest(IPaymentProcessor.PaymentRequest memory request) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
                 address(processor),
@@ -107,14 +102,12 @@ contract PaymentProcessorTest is Test {
         );
     }
 
-    function _signRequest(
-        IPaymentProcessor.PaymentRequest memory request,
-        uint256 signerKey
-    ) internal returns (bytes memory) {
+    function _signRequest(IPaymentProcessor.PaymentRequest memory request, uint256 signerKey)
+        internal
+        returns (bytes memory)
+    {
         bytes32 requestHash = _hashRequest(request);
-        bytes32 ethSignedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash)
-        );
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", requestHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, ethSignedHash);
         return abi.encodePacked(r, s, v);
     }
