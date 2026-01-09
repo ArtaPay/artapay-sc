@@ -280,7 +280,7 @@ Mock Tokens:
 
 This project uses:
 
-- Solidity 0.8.20
+- Solidity 0.8.31 Cancun
 - Foundry for testing and deployment
 - OpenZeppelin contracts for standards
 
