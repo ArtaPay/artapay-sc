@@ -6,6 +6,7 @@ Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infra
 
 ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abstraction to provide:
 
+- **Only time approval**: Users only need eth in the beginning for one time approval and then become gasless
 - **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
 - **Multi-Stablecoin Support**: Support for 7 stablecoins (USDC, USDT, IDRX, JPYC, EURC, MXNT, CNHT)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
@@ -111,15 +112,11 @@ Factory for deploying deterministic smart accounts using CREATE2.
 
 | Fee Type       | Rate          | Paid By | Token      |
 | -------------- | ------------- | ------- | ---------- |
-| Platform Fee   | 0.3% (30 BPS) | Payer   | Stablecoin |
-| Swap Fee       | 0.1% (10 BPS) | User    | Stablecoin |
+| Gas Fee Markup | 5% (500 BPS)  | Sender  | Stablecoin |
+| Platform Fee   | 0.3% (30 BPS) | Sender  | Stablecoin |
+| Swap Fee       | 0.1% (10 BPS) | Sender  | Stablecoin |
 
 ## Setup & Installation
-
-### Prerequisites
-
-- [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- Node.js 18+ (for scripts)
 
 ### Installation
 
@@ -169,20 +166,9 @@ Run the test suite:
 # Run all tests
 forge test
 
-# Run tests with verbosity
-forge test -vvv
-
 # Run specific test file
 forge test --match-path test/Paymaster.t.sol
 
-# Run with gas report
-forge test --gas-report
-```
-
-### Test Coverage
-
-```bash
-forge coverage
 ```
 
 ## Deployment
@@ -200,28 +186,6 @@ forge script script/DeployAll.s.sol \
 forge script script/DeployAll.s.sol --rpc-url lisk_sepolia --broadcast --verify
 ```
 
-### Manual Deployment Steps
-
-1. **Deploy Mock Tokens** (if not using existing tokens)
-2. **Deploy StablecoinRegistry**
-3. **Register Stablecoins** in Registry
-4. **Deploy Paymaster** with Registry address
-5. **Add Supported Tokens** to Paymaster
-6. **Deposit ETH** to EntryPoint for gas sponsorship
-7. **Deploy StableSwap** (optional)
-8. **Deploy PaymentProcessor** (optional)
-
-### Verify Contracts
-
-Contracts are automatically verified during deployment if `--verify` flag is used. To verify manually:
-
-```bash
-forge verify-contract <CONTRACT_ADDRESS> \
-  src/<PATH>/<CONTRACT>.sol:<CONTRACT_NAME> \
-  --chain lisk-sepolia \
-  --watch
-```
-
 ## Network Information
 
 ### Lisk Sepolia Testnet
@@ -229,7 +193,6 @@ forge verify-contract <CONTRACT_ADDRESS> \
 - **Chain ID**: 4202
 - **RPC URL**: https://rpc.sepolia-api.lisk.com
 - **Block Explorer**: https://sepolia-blockscout.lisk.com
-- **EntryPoint v0.7**: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
 
 ## Supported Stablecoins
 
@@ -249,25 +212,24 @@ forge verify-contract <CONTRACT_ADDRESS> \
 
 ```
 EntryPoint:            0x0000000071727De22E5E9d8BAf0edAc6f37da032
-StablecoinRegistry:    <DEPLOYED_ADDRESS>
-Paymaster:             <DEPLOYED_ADDRESS>
-StableSwap:            <DEPLOYED_ADDRESS>
-PaymentProcessor:      <DEPLOYED_ADDRESS>
-SimpleAccountFactory:  <DEPLOYED_ADDRESS>
+StablecoinRegistry:    0x682C2619E044B7200F2e6198835C934AB3a7199C
+Paymaster:             0x6f1330f207Ab5e2a52c550AF308bA28e3c517311
+StableSwap:            0x49c37C3b3a96028D2A1A1e678A302C1d727f3FEF
+PaymentProcessor:      0x04Ef4D2E10a35b027050816B8F801DEDC67ee49E
+SimpleAccountFactory:  0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985
 
 Mock Tokens:
-  USDC:  <DEPLOYED_ADDRESS>
-  USDT:  <DEPLOYED_ADDRESS>
-  IDRX:  <DEPLOYED_ADDRESS>
-  JPYC:  <DEPLOYED_ADDRESS>
-  EURC:  <DEPLOYED_ADDRESS>
-  MXNT:  <DEPLOYED_ADDRESS>
-  CNHT:  <DEPLOYED_ADDRESS>
+  USDC:  0x301D9ed91BACB39B798a460D133105BA729c6302
+  USDT:  0x03F60361Aa488826e7DA7D7ADB2E1c6fC96D1B8B
+  IDRX:  0x18bEA3CDa9dE68E74ba9F33F1B2e11ad345112f0
+  JPYC:  0x97F9812a67b6cBA4F4D9b1013C5f4D708Ce9aA9e
+  EURC:  0xd10F51695bc3318759A75335EfE61E32727330b6
+  MXNT:  0x5e8B38DC8E00c2332AC253600975502CF9fbF36a
+  CNHT:  0xDFaE672AD0e094Ee64e370da99b1E37AB58AAc4f
 ```
 
 ## Security Considerations
 
-- **Private Key Management**: Never commit private keys. Use environment variables or hardware wallets.
 - **Rate Updates**: StablecoinRegistry has a 50% max rate change limit per update to prevent abuse.
 - **Paymaster Deposits**: Monitor EntryPoint deposits to ensure sufficient gas sponsorship funds.
 - **Nonce Replay**: PaymentProcessor uses nonces to prevent replay attacks.
