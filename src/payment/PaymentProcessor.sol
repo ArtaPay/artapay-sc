@@ -36,6 +36,8 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
     error SlippageExceeded();
     error NonceAlreadyUsed();
     error DeadlineExpired();
+    error InvalidPaymentArray();
+    error InsufficientPayment();
 
     constructor(address _swap, address _registry, address _feeRecipient) Ownable(msg.sender) {
         swap = IStableSwap(_swap);
@@ -104,6 +106,108 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
             payToken,
             request.requestedAmount,
             cost.totalRequired
+        );
+    }
+
+    /**
+     * @notice Execute payment using multiple tokens (SPLIT PAYMENT)
+     * @dev Merchant signs the request off-chain, payer can pay with multiple tokens
+     * @param request The payment request data signed by merchant
+     * @param merchantSignature Merchant's signature over the request hash
+     * @param payments Array of token/amount pairs the payer will use
+     */
+    function executeMultiTokenPayment(
+        PaymentRequest calldata request,
+        bytes calldata merchantSignature,
+        IPaymentProcessor.TokenPayment[] calldata payments
+    ) external {
+        // Validate request
+        if (request.recipient == address(0)) revert InvalidRecipient();
+        if (request.requestedAmount == 0) revert InvalidAmount();
+        if (request.deadline < block.timestamp) revert DeadlineExpired();
+        if (usedNonces[request.nonce]) revert NonceAlreadyUsed();
+        if (!registry.isStablecoinActive(request.requestedToken)) revert InvalidToken();
+        if (request.merchantSigner == address(0)) revert InvalidSignature();
+        if (payments.length == 0) revert InvalidPaymentArray();
+
+        // Verify merchant signature
+        bytes32 requestHash = _hashPaymentRequest(request);
+        bytes32 ethSignedHash = requestHash.toEthSignedMessageHash();
+        address recoveredSigner = ethSignedHash.recover(merchantSignature);
+
+        if (recoveredSigner != request.merchantSigner) revert InvalidSignature();
+
+        // Mark nonce as used
+        usedNonces[request.nonce] = true;
+
+        // Track amounts for event
+        address[] memory tokensUsed = new address[](payments.length);
+        uint256[] memory amountsUsed = new uint256[](payments.length);
+
+        uint256 totalCollectedInRequestedToken = 0;
+
+        // Process each payment token
+        for (uint256 i = 0; i < payments.length; i++) {
+            address payToken = payments[i].token;
+            uint256 payAmount = payments[i].amount;
+
+            if (!registry.isStablecoinActive(payToken)) revert InvalidToken();
+            if (payAmount == 0) revert InvalidAmount();
+
+            tokensUsed[i] = payToken;
+            amountsUsed[i] = payAmount;
+
+            // Transfer from payer to contract
+            IERC20(payToken).safeTransferFrom(msg.sender, address(this), payAmount);
+
+            // Convert to requested token if needed
+            if (payToken != request.requestedToken) {
+                // Calculate swap fee (0.1%)
+                uint256 swapFee = (payAmount * 10) / BPS_DENOMINATOR;
+                uint256 amountToSwap = payAmount - swapFee;
+
+                // Approve and swap
+                IERC20(payToken).approve(address(swap), payAmount);
+                
+                // Get expected output
+                uint256 expectedOut = registry.convert(payToken, request.requestedToken, amountToSwap);
+                
+                // Execute swap
+                swap.swap(amountToSwap, payToken, request.requestedToken, expectedOut);
+
+                // Add swapped amount to total
+                totalCollectedInRequestedToken += expectedOut;
+            } else {
+                // Same token, just add directly
+                totalCollectedInRequestedToken += payAmount;
+            }
+        }
+
+        // Calculate platform fee (0.3% of requested amount)
+        uint256 platformFee = (request.requestedAmount * PLATFORM_FEE) / BPS_DENOMINATOR;
+        uint256 requiredTotal = request.requestedAmount + platformFee;
+
+        // Ensure payer sent enough to cover merchant amount + platform fee
+        if (totalCollectedInRequestedToken < requiredTotal) revert InsufficientPayment();
+
+        // Pay merchant and fee recipient
+        IERC20(request.requestedToken).safeTransfer(request.recipient, request.requestedAmount);
+        IERC20(request.requestedToken).safeTransfer(feeRecipient, platformFee);
+
+        // Return excess to payer if any
+        uint256 excess = totalCollectedInRequestedToken - requiredTotal;
+        if (excess > 0) {
+            IERC20(request.requestedToken).safeTransfer(msg.sender, excess);
+        }
+
+        emit MultiTokenPaymentCompleted(
+            request.nonce,
+            request.recipient,
+            msg.sender,
+            request.requestedToken,
+            request.requestedAmount,
+            tokensUsed,
+            amountsUsed
         );
     }
 
