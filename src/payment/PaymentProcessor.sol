@@ -168,10 +168,10 @@ contract PaymentProcessor is IPaymentProcessor, Ownable {
 
                 // Approve and swap
                 IERC20(payToken).approve(address(swap), payAmount);
-                
+
                 // Get expected output
                 uint256 expectedOut = registry.convert(payToken, request.requestedToken, amountToSwap);
-                
+
                 // Execute swap
                 swap.swap(amountToSwap, payToken, request.requestedToken, expectedOut);
 
