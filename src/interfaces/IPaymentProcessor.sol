@@ -34,6 +34,16 @@ interface IPaymentProcessor {
     }
 
     /**
+     * @notice Multi-token payment input
+     * @param token Token address to pay with
+     * @param amount Amount in this token
+     */
+    struct TokenPayment {
+        address token;
+        uint256 amount;
+    }
+
+    /**
      * @notice Fee breakdown for payment calculation
      * @param baseAmount Base amount before fees
      * @param platformFee Platform fee (0.3%)
@@ -68,6 +78,26 @@ interface IPaymentProcessor {
     );
 
     /**
+     * @notice Emitted when multi-token payment is completed
+     * @param nonce Unique payment request nonce
+     * @param recipient Merchant address
+     * @param payer Customer address
+     * @param requestedToken Token merchant requested
+     * @param requestedAmount Amount merchant requested
+     * @param tokensUsed Array of tokens used for payment
+     * @param amountsUsed Array of amounts used for each token
+     */
+    event MultiTokenPaymentCompleted(
+        bytes32 indexed nonce,
+        address indexed recipient,
+        address indexed payer,
+        address requestedToken,
+        uint256 requestedAmount,
+        address[] tokensUsed,
+        uint256[] amountsUsed
+    );
+
+    /**
      * @notice Calculate payment cost including fees
      * @param requestedToken Token merchant wants
      * @param requestedAmount Amount merchant wants
@@ -91,5 +121,17 @@ interface IPaymentProcessor {
         bytes calldata merchantSignature,
         address payToken,
         uint256 maxAmountToPay
+    ) external;
+
+    /**
+     * @notice Execute payment using multiple tokens
+     * @param request Payment request data
+     * @param merchantSignature Merchant's signature over request
+     * @param payments Array of token/amount pairs customer will pay with
+     */
+    function executeMultiTokenPayment(
+        PaymentRequest calldata request,
+        bytes calldata merchantSignature,
+        TokenPayment[] calldata payments
     ) external;
 }
