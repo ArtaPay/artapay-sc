@@ -12,9 +12,9 @@ import "../src/token/MockStableCoin.sol";
 contract StablecoinRegistryTest is Test {
     StablecoinRegistry public registry;
     MockStableCoin public usdc;
-    MockStableCoin public usdt;
+    MockStableCoin public usds;
     MockStableCoin public idrx;
-    MockStableCoin public jpyc;
+    MockStableCoin public tgbp;
     MockStableCoin public euroc;
 
     address public owner = address(1);
@@ -24,16 +24,16 @@ contract StablecoinRegistryTest is Test {
         vm.startPrank(owner);
         registry = new StablecoinRegistry();
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
-        usdt = new MockStableCoin("Tether USD", "USDT", 6, "US");
+        usds = new MockStableCoin("Sky Dollar", "USDS", 6, "US");
         idrx = new MockStableCoin("Rupiah Token", "IDRX", 2, "ID");
-        jpyc = new MockStableCoin("JPY Coin", "JPYC", 18, "JP");
-        euroc = new MockStableCoin("EURO Coin", "EUROC", 6, "EU");
+        tgbp = new MockStableCoin("Tokenised GBP", "tGBP", 18, "GB");
+        euroc = new MockStableCoin("EURC", "EURC", 6, "EU");
 
         registry.registerStablecoin(address(usdc), "USDC", "US", 1e8);
-        registry.registerStablecoin(address(usdt), "USDT", "US", 1e8);
+        registry.registerStablecoin(address(usds), "USDS", "US", 1e8);
         registry.registerStablecoin(address(idrx), "IDRX", "ID", 16000e8);
-        registry.registerStablecoin(address(jpyc), "JPYC", "JP", 150e8);
-        registry.registerStablecoin(address(euroc), "EUROC", "EU", 0.92e8);
+        registry.registerStablecoin(address(tgbp), "tGBP", "GB", 8e7);
+        registry.registerStablecoin(address(euroc), "EURC", "EU", 95e6);
 
         vm.stopPrank();
     }
@@ -134,7 +134,7 @@ contract StablecoinRegistryTest is Test {
     function testBatchUpdateRates() public {
         address[] memory tokens = new address[](2);
         tokens[0] = address(usdc);
-        tokens[1] = address(usdt);
+        tokens[1] = address(usds);
 
         uint256[] memory rates = new uint256[](2);
         rates[0] = 1.1e8;
@@ -144,10 +144,10 @@ contract StablecoinRegistryTest is Test {
         registry.batchUpdateRates(tokens, rates);
 
         IStablecoinRegistry.StablecoinInfo memory usdcInfo = registry.getStablecoin(address(usdc));
-        IStablecoinRegistry.StablecoinInfo memory usdtInfo = registry.getStablecoin(address(usdt));
+        IStablecoinRegistry.StablecoinInfo memory usdsInfo = registry.getStablecoin(address(usds));
 
         assertEq(usdcInfo.rateToUSD, 1.1e8);
-        assertEq(usdtInfo.rateToUSD, 1.1e8);
+        assertEq(usdsInfo.rateToUSD, 1.1e8);
     }
 
     function testUnauthorizedCannotUpdateRate() public {
@@ -194,11 +194,11 @@ contract StablecoinRegistryTest is Test {
         assertEq(result, amount, "Same token conversion should return same amount");
     }
 
-    function testConvertUSDCToUSDT() public {
+    function testConvertUSDCToUSDS() public {
         uint256 usdcAmount = 100 * 10 ** 6;
-        uint256 usdtResult = registry.convert(address(usdc), address(usdt), usdcAmount);
+        uint256 usdsResult = registry.convert(address(usdc), address(usds), usdcAmount);
 
-        assertApproxEqRel(usdtResult, 100 * 10 ** 6, 0.01e18);
+        assertApproxEqRel(usdsResult, 100 * 10 ** 6, 0.01e18);
     }
 
     function testConvertUSDCToIDRX() public {
@@ -216,8 +216,8 @@ contract StablecoinRegistryTest is Test {
     }
 
     function testConvertWithDifferentDecimals() public {
-        uint256 jpycAmount = 150 * 10 ** 18;
-        uint256 usdcResult = registry.convert(address(jpyc), address(usdc), jpycAmount);
+        uint256 tgbpAmount = 8e17; // 0.8 tGBP with 18 decimals
+        uint256 usdcResult = registry.convert(address(tgbp), address(usdc), tgbpAmount);
 
         assertApproxEqRel(usdcResult, 1 * 10 ** 6, 0.01e18);
     }
@@ -299,8 +299,8 @@ contract StablecoinRegistryTest is Test {
         address[] memory idTokens = registry.getStablecoinsByRegion("ID");
         assertEq(idTokens.length, 1);
 
-        address[] memory jpTokens = registry.getStablecoinsByRegion("JP");
-        assertEq(jpTokens.length, 1);
+        address[] memory gbTokens = registry.getStablecoinsByRegion("GB");
+        assertEq(gbTokens.length, 1);
     }
 
     function testGetRateBounds() public {
@@ -318,7 +318,7 @@ contract StablecoinRegistryTest is Test {
         registry.pause();
 
         vm.expectRevert();
-        registry.convert(address(usdc), address(usdt), 100 * 10 ** 6);
+        registry.convert(address(usdc), address(usds), 100 * 10 ** 6);
     }
 
     function testPauseBlocksEthConversion() public {
@@ -336,7 +336,7 @@ contract StablecoinRegistryTest is Test {
         vm.prank(owner);
         registry.unpause();
 
-        uint256 result = registry.convert(address(usdc), address(usdt), 100 * 10 ** 6);
+        uint256 result = registry.convert(address(usdc), address(usds), 100 * 10 ** 6);
         assertGt(result, 0);
     }
 
@@ -347,12 +347,12 @@ contract StablecoinRegistryTest is Test {
     }
 
     function testConvertZeroAmount() public {
-        uint256 result = registry.convert(address(usdc), address(usdt), 0);
+        uint256 result = registry.convert(address(usdc), address(usds), 0);
         assertEq(result, 0);
     }
 
     function testConvertVerySmallAmount() public {
-        uint256 result = registry.convert(address(usdc), address(usdt), 1);
+        uint256 result = registry.convert(address(usdc), address(usds), 1);
         assertTrue(result >= 0);
     }
 

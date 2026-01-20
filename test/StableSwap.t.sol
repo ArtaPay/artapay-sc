@@ -12,7 +12,7 @@ contract StableSwapTest is Test {
 
     MockStableCoin public usdc;
     MockStableCoin public idrx;
-    MockStableCoin public jpyc;
+    MockStableCoin public tgbp;
 
     address public owner = address(this);
     address public user1 = address(0x1);
@@ -20,32 +20,32 @@ contract StableSwapTest is Test {
 
     uint256 constant USDC_RATE = 1e8;
     uint256 constant IDRX_RATE = 16000e8;
-    uint256 constant JPYC_RATE = 150e8;
+    uint256 constant TGBP_RATE = 8e7;
 
     function setUp() public {
         registry = new StablecoinRegistry();
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
         idrx = new MockStableCoin("Indonesian Rupiah Token", "IDRX", 2, "ID");
-        jpyc = new MockStableCoin("JPY Coin", "JPYC", 18, "JP");
+        tgbp = new MockStableCoin("Tokenised GBP", "tGBP", 18, "GB");
         registry.registerStablecoin(address(usdc), "USDC", "US", USDC_RATE);
         registry.registerStablecoin(address(idrx), "IDRX", "ID", IDRX_RATE);
-        registry.registerStablecoin(address(jpyc), "JPYC", "JP", JPYC_RATE);
+        registry.registerStablecoin(address(tgbp), "tGBP", "GB", TGBP_RATE);
         stableSwap = new StableSwap(address(registry));
 
         usdc.mint(owner, 1000000 * 10 ** 6);
         idrx.mint(owner, 16000000000 * 10 ** 2);
-        jpyc.mint(owner, 150000000 * 10 ** 18);
+        tgbp.mint(owner, 150000000 * 10 ** 18);
 
         usdc.mint(user1, 10000 * 10 ** 6);
         idrx.mint(user1, 160000000 * 10 ** 2);
 
         usdc.approve(address(stableSwap), type(uint256).max);
         idrx.approve(address(stableSwap), type(uint256).max);
-        jpyc.approve(address(stableSwap), type(uint256).max);
+        tgbp.approve(address(stableSwap), type(uint256).max);
 
         stableSwap.deposit(address(usdc), 100000 * 10 ** 6);
         stableSwap.deposit(address(idrx), 1600000000 * 10 ** 2);
-        stableSwap.deposit(address(jpyc), 15000000 * 10 ** 18);
+        stableSwap.deposit(address(tgbp), 15000000 * 10 ** 18);
     }
 
     function test_Deposit() public {

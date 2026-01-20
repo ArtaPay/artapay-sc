@@ -18,12 +18,14 @@ import "../src/account/SimpleAccountFactory.sol";
 contract DeployAll is Script {
     // Deployed contracts
     MockStableCoin public usdc;
-    MockStableCoin public usdt;
+    MockStableCoin public usds;
+    MockStableCoin public eurc;
+    MockStableCoin public brz;
+    MockStableCoin public audd;
+    MockStableCoin public cadc;
+    MockStableCoin public zchf;
+    MockStableCoin public tgbp;
     MockStableCoin public idrx;
-    MockStableCoin public jpyc;
-    MockStableCoin public euroc;
-    MockStableCoin public mxnt;
-    MockStableCoin public cnht;
 
     StablecoinRegistry public registry;
     Paymaster public paymaster;
@@ -48,46 +50,58 @@ contract DeployAll is Script {
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
         console.log("USDC deployed at:", address(usdc));
 
-        usdt = new MockStableCoin("Tether USD", "USDT", 6, "US");
-        console.log("USDT deployed at:", address(usdt));
+        usds = new MockStableCoin("Sky Dollar", "USDS", 6, "US");
+        console.log("USDS deployed at:", address(usds));
+
+        eurc = new MockStableCoin("EURC", "EURC", 6, "EU");
+        console.log("EURC deployed at:", address(eurc));
+
+        brz = new MockStableCoin("Brazilian Digital", "BRZ", 6, "BR");
+        console.log("BRZ deployed at:", address(brz));
+
+        audd = new MockStableCoin("AUDD", "AUDD", 6, "AU");
+        console.log("AUDD deployed at:", address(audd));
+
+        cadc = new MockStableCoin("CAD Coin", "CADC", 6, "CA");
+        console.log("CADC deployed at:", address(cadc));
+
+        zchf = new MockStableCoin("Frankencoin", "ZCHF", 6, "CH");
+        console.log("ZCHF deployed at:", address(zchf));
+
+        tgbp = new MockStableCoin("Tokenised GBP", "tGBP", 18, "GB");
+        console.log("tGBP deployed at:", address(tgbp));
 
         idrx = new MockStableCoin("Indonesia Rupiah", "IDRX", 6, "ID");
         console.log("IDRX deployed at:", address(idrx));
-
-        jpyc = new MockStableCoin("JPY Coin", "JPYC", 8, "JP");
-        console.log("JPYC deployed at:", address(jpyc));
-
-        euroc = new MockStableCoin("Euro Coin", "EURC", 6, "EU");
-        console.log("EUROC deployed at:", address(euroc));
-
-        mxnt = new MockStableCoin("Mexican Peso Token", "MXNT", 6, "MX");
-        console.log("MXNT deployed at:", address(mxnt));
-
-        cnht = new MockStableCoin("Chinese Yuan Token", "CNHT", 6, "CN");
-        console.log("CNHT deployed at:", address(cnht));
 
         console.log("\n=== Step 2: Minting Initial Supply ===");
 
         usdc.mint(deployer, 100000 * 10 ** 6); // 100K USDC
         console.log("Minted 100,000 USDC to deployer");
 
-        usdt.mint(deployer, 100000 * 10 ** 6); // 100K USDT
-        console.log("Minted 100,000 USDT to deployer");
+        usds.mint(deployer, 100000 * 10 ** 6); // 100K USDS
+        console.log("Minted 100,000 USDS to deployer");
 
-        idrx.mint(deployer, 1600000000 * 10 ** 6); // 160M IDRX
-        console.log("Minted 160,000,000 IDRX to deployer");
-
-        jpyc.mint(deployer, 15000000 * 10 ** 8); // 15M JPYC
-        console.log("Minted 15,000,000 JPYC to deployer");
-
-        euroc.mint(deployer, 100000 * 10 ** 6); // 100K EURC
+        eurc.mint(deployer, 100000 * 10 ** 6); // 100K EURC
         console.log("Minted 100,000 EURC to deployer");
 
-        mxnt.mint(deployer, 2000000 * 10 ** 6); // 2M MXNT
-        console.log("Minted 2,000,000 MXNT to deployer");
+        brz.mint(deployer, 100000 * 10 ** 6); // 100K BRZ
+        console.log("Minted 100,000 BRZ to deployer");
 
-        cnht.mint(deployer, 700000 * 10 ** 6); // 700K CNHT
-        console.log("Minted 700,000 CNHT to deployer");
+        audd.mint(deployer, 100000 * 10 ** 6); // 100K AUDD
+        console.log("Minted 100,000 AUDD to deployer");
+
+        cadc.mint(deployer, 100000 * 10 ** 6); // 100K CADC
+        console.log("Minted 100,000 CADC to deployer");
+
+        zchf.mint(deployer, 100000 * 10 ** 6); // 100K ZCHF
+        console.log("Minted 100,000 ZCHF to deployer");
+
+        tgbp.mint(deployer, 100000 * 10 ** 18); // 100K tGBP
+        console.log("Minted 100,000 tGBP to deployer");
+
+        idrx.mint(deployer, 1600000000 * 10 ** 6); // 1.6B IDRX
+        console.log("Minted 1,600,000,000 IDRX to deployer");
 
         console.log("\n=== Step 3: Deploying StablecoinRegistry ===");
 
@@ -100,48 +114,58 @@ contract DeployAll is Script {
 
         console.log("\n=== Step 4: Registering Stablecoins ===");
 
-        address[] memory tokens = new address[](7);
-        string[] memory symbols = new string[](7);
-        string[] memory regions = new string[](7);
-        uint256[] memory rates = new uint256[](7);
+        address[] memory tokens = new address[](9);
+        string[] memory symbols = new string[](9);
+        string[] memory regions = new string[](9);
+        uint256[] memory rates = new uint256[](9);
 
         tokens[0] = address(usdc);
         symbols[0] = "USDC";
         regions[0] = "US";
         rates[0] = vm.envUint("USDC_RATE");
 
-        tokens[1] = address(usdt);
-        symbols[1] = "USDT";
+        tokens[1] = address(usds);
+        symbols[1] = "USDS";
         regions[1] = "US";
-        rates[1] = vm.envUint("USDT_RATE");
+        rates[1] = vm.envUint("USDS_RATE");
 
-        tokens[2] = address(idrx);
-        symbols[2] = "IDRX";
-        regions[2] = "ID";
-        rates[2] = vm.envUint("IDRX_RATE");
+        tokens[2] = address(eurc);
+        symbols[2] = "EURC";
+        regions[2] = "EU";
+        rates[2] = vm.envUint("EURC_RATE");
 
-        tokens[3] = address(jpyc);
-        symbols[3] = "JPYC";
-        regions[3] = "JP";
-        rates[3] = vm.envUint("JPYC_RATE");
+        tokens[3] = address(brz);
+        symbols[3] = "BRZ";
+        regions[3] = "BR";
+        rates[3] = vm.envUint("BRZ_RATE");
 
-        tokens[4] = address(euroc);
-        symbols[4] = "EURC";
-        regions[4] = "EU";
-        rates[4] = vm.envUint("EURC_RATE");
+        tokens[4] = address(audd);
+        symbols[4] = "AUDD";
+        regions[4] = "AU";
+        rates[4] = vm.envUint("AUDD_RATE");
 
-        tokens[5] = address(mxnt);
-        symbols[5] = "MXNT";
-        regions[5] = "MX";
-        rates[5] = vm.envUint("MXNT_RATE");
+        tokens[5] = address(cadc);
+        symbols[5] = "CADC";
+        regions[5] = "CA";
+        rates[5] = vm.envUint("CADC_RATE");
 
-        tokens[6] = address(cnht);
-        symbols[6] = "CNHT";
-        regions[6] = "CN";
-        rates[6] = vm.envUint("CNHT_RATE");
+        tokens[6] = address(zchf);
+        symbols[6] = "ZCHF";
+        regions[6] = "CH";
+        rates[6] = vm.envUint("ZCHF_RATE");
+
+        tokens[7] = address(tgbp);
+        symbols[7] = "tGBP";
+        regions[7] = "GB";
+        rates[7] = vm.envUint("TGBP_RATE");
+
+        tokens[8] = address(idrx);
+        symbols[8] = "IDRX";
+        regions[8] = "ID";
+        rates[8] = vm.envUint("IDRX_RATE");
 
         registry.batchRegisterStablecoins(tokens, symbols, regions, rates);
-        console.log("Registered 7 stablecoins in registry");
+        console.log("Registered 9 stablecoins in registry");
 
         console.log("\n=== Step 5: Deploying Paymaster ===");
 
@@ -150,7 +174,7 @@ contract DeployAll is Script {
 
         // Add supported tokens to Paymaster
         paymaster.addSupportedTokens(tokens);
-        console.log("Added 7 supported tokens to Paymaster");
+        console.log("Added 9 supported tokens to Paymaster");
 
         // Deposit ETH to EntryPoint for gas sponsorship (if specified)
         uint256 depositWei = vm.envOr("ENTRYPOINT_DEPOSIT_WEI", uint256(0));
@@ -203,12 +227,14 @@ contract DeployAll is Script {
 
         console.log("\nMock Stablecoins:");
         console.log("  USDC:", address(usdc));
-        console.log("  USDT:", address(usdt));
+        console.log("  USDS:", address(usds));
+        console.log("  EURC:", address(eurc));
+        console.log("  BRZ:", address(brz));
+        console.log("  AUDD:", address(audd));
+        console.log("  CADC:", address(cadc));
+        console.log("  ZCHF:", address(zchf));
+        console.log("  tGBP:", address(tgbp));
         console.log("  IDRX:", address(idrx));
-        console.log("  JPYC:", address(jpyc));
-        console.log("  EURC:", address(euroc));
-        console.log("  MXNT:", address(mxnt));
-        console.log("  CNHT:", address(cnht));
 
         console.log("\nCore Contracts:");
         console.log("  StablecoinRegistry:", address(registry));
@@ -230,12 +256,14 @@ contract DeployAll is Script {
         console.log("PAYMENT_PROCESSOR_ADDRESS=%s", address(paymentProcessor));
         console.log("SIMPLE_ACCOUNT_FACTORY=%s", address(accountFactory));
         console.log("\nMOCK_USDC_ADDRESS=%s", address(usdc));
-        console.log("MOCK_USDT_ADDRESS=%s", address(usdt));
+        console.log("MOCK_USDS_ADDRESS=%s", address(usds));
+        console.log("MOCK_EURC_ADDRESS=%s", address(eurc));
+        console.log("MOCK_BRZ_ADDRESS=%s", address(brz));
+        console.log("MOCK_AUDD_ADDRESS=%s", address(audd));
+        console.log("MOCK_CADC_ADDRESS=%s", address(cadc));
+        console.log("MOCK_ZCHF_ADDRESS=%s", address(zchf));
+        console.log("MOCK_TGBP_ADDRESS=%s", address(tgbp));
         console.log("MOCK_IDRX_ADDRESS=%s", address(idrx));
-        console.log("MOCK_JPYC_ADDRESS=%s", address(jpyc));
-        console.log("MOCK_EURC_ADDRESS=%s", address(euroc));
-        console.log("MOCK_MXNT_ADDRESS=%s", address(mxnt));
-        console.log("MOCK_CNHT_ADDRESS=%s", address(cnht));
 
         console.log("\n========================================\n");
         console.log("Deployment completed successfully!");

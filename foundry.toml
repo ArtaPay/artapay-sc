@@ -14,11 +14,11 @@ remappings = [
     "forge-std/=lib/forge-std/src/"
 ]
 
-# Lisk Sepolia Network Configuration
+# Base Sepolia Network Configuration
 [rpc_endpoints]
-lisk_sepolia = "${LISK_SEPOLIA_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
 
 [etherscan]
-lisk_sepolia = { key = "${BLOCKSCOUT_API_KEY}", url = "https://sepolia-blockscout.lisk.com/api" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

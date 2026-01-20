@@ -16,7 +16,7 @@ contract PaymentProcessorTest is Test {
     StableSwap public swap;
     StablecoinRegistry public registry;
     MockStableCoin public usdc;
-    MockStableCoin public usdt;
+    MockStableCoin public usds;
     MockStableCoin public idrx;
 
     address public owner = address(1);
@@ -34,13 +34,13 @@ contract PaymentProcessorTest is Test {
         vm.startPrank(owner);
 
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
-        usdt = new MockStableCoin("Tether USD", "USDT", 6, "US");
+        usds = new MockStableCoin("Sky Dollar", "USDS", 6, "US");
         idrx = new MockStableCoin("Rupiah Token", "IDRX", 6, "ID");
 
         registry = new StablecoinRegistry();
         registry.setEthUsdRate(3000e8); // $3000
         registry.registerStablecoin(address(usdc), "USDC", "US", 1e8);
-        registry.registerStablecoin(address(usdt), "USDT", "US", 1e8);
+        registry.registerStablecoin(address(usds), "USDS", "US", 1e8);
         registry.registerStablecoin(address(idrx), "IDRX", "ID", 16000e8);
 
         swap = new StableSwap(address(registry));
@@ -48,22 +48,22 @@ contract PaymentProcessorTest is Test {
         processor = new PaymentProcessor(address(swap), address(registry), feeRecipient);
 
         usdc.mint(owner, 1000000 * 10 ** 6);
-        usdt.mint(owner, 1000000 * 10 ** 6);
+        usds.mint(owner, 1000000 * 10 ** 6);
         idrx.mint(owner, 16000000000 * 10 ** 6);
 
         usdc.approve(address(swap), type(uint256).max);
-        usdt.approve(address(swap), type(uint256).max);
+        usds.approve(address(swap), type(uint256).max);
         idrx.approve(address(swap), type(uint256).max);
 
         swap.deposit(address(usdc), 100000 * 10 ** 6);
-        swap.deposit(address(usdt), 100000 * 10 ** 6);
+        swap.deposit(address(usds), 100000 * 10 ** 6);
         swap.deposit(address(idrx), 1600000000 * 10 ** 6);
 
         vm.stopPrank();
 
         vm.startPrank(payer);
         usdc.faucet(10000);
-        usdt.faucet(10000);
+        usds.faucet(10000);
         idrx.mint(payer, 200000000 * 10 ** 6);
         vm.stopPrank();
     }
@@ -138,7 +138,7 @@ contract PaymentProcessorTest is Test {
         uint256 requestedAmount = 100 * 10 ** 6;
 
         IPaymentProcessor.FeeBreakdown memory cost =
-            processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdt));
+            processor.calculatePaymentCost(address(usdc), requestedAmount, address(usds));
 
         assertTrue(cost.swapFee > 0);
         assertTrue(cost.totalRequired > requestedAmount);
@@ -177,14 +177,14 @@ contract PaymentProcessorTest is Test {
         bytes memory merchantSignature = _signRequest(request, merchantPrivateKey);
 
         IPaymentProcessor.FeeBreakdown memory cost =
-            processor.calculatePaymentCost(address(usdc), requestedAmount, address(usdt));
+            processor.calculatePaymentCost(address(usdc), requestedAmount, address(usds));
 
         vm.startPrank(payer);
-        usdt.approve(address(processor), cost.totalRequired);
+        usds.approve(address(processor), cost.totalRequired);
 
         uint256 merchantBalanceBefore = usdc.balanceOf(merchant);
 
-        processor.executePayment(request, merchantSignature, address(usdt), cost.totalRequired);
+        processor.executePayment(request, merchantSignature, address(usds), cost.totalRequired);
 
         assertEq(usdc.balanceOf(merchant) - merchantBalanceBefore, requestedAmount);
 

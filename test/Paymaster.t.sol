@@ -49,7 +49,7 @@ contract PaymasterTest is Test {
     Paymaster public paymaster;
     StablecoinRegistry public registry;
     MockStableCoin public usdc;
-    MockStableCoin public usdt;
+    MockStableCoin public usds;
     MockStableCoin public idrx;
     MockEntryPoint public entryPoint;
 
@@ -63,17 +63,17 @@ contract PaymasterTest is Test {
 
         entryPoint = new MockEntryPoint();
         usdc = new MockStableCoin("USD Coin", "USDC", 6, "US");
-        usdt = new MockStableCoin("Tether USD", "USDT", 6, "US");
+        usds = new MockStableCoin("Sky Dollar", "USDS", 6, "US");
         idrx = new MockStableCoin("Rupiah Token", "IDRX", 2, "ID");
 
         registry = new StablecoinRegistry();
         registry.registerStablecoin(address(usdc), "USDC", "US", 1e8);
-        registry.registerStablecoin(address(usdt), "USDT", "US", 1e8);
+        registry.registerStablecoin(address(usds), "USDS", "US", 1e8);
         registry.registerStablecoin(address(idrx), "IDRX", "ID", 16000e8);
 
         paymaster = new Paymaster(address(entryPoint), address(registry));
         paymaster.setSupportedToken(address(usdc), true);
-        paymaster.setSupportedToken(address(usdt), true);
+        paymaster.setSupportedToken(address(usds), true);
         paymaster.setSupportedToken(address(idrx), true);
         paymaster.setSigner(signer, true);
 
@@ -84,7 +84,7 @@ contract PaymasterTest is Test {
 
         vm.startPrank(user);
         usdc.faucet(1000);
-        usdt.faucet(1000);
+        usds.faucet(1000);
         idrx.mint(user, 20000000 * 10 ** 2);
         vm.stopPrank();
     }
@@ -109,14 +109,14 @@ contract PaymasterTest is Test {
         uint256 ethCost = 0.01 ether;
 
         uint256 usdcCost = paymaster.calculateFee(address(usdc), ethCost);
-        uint256 usdtCost = paymaster.calculateFee(address(usdt), ethCost);
+        uint256 usdsCost = paymaster.calculateFee(address(usds), ethCost);
         uint256 idrxCost = paymaster.calculateFee(address(idrx), ethCost);
 
-        assertApproxEqRel(usdcCost, usdtCost, 0.01e18);
+        assertApproxEqRel(usdcCost, usdsCost, 0.01e18);
         assertTrue(idrxCost > usdcCost, "IDRX cost should be higher");
 
         console.log("USDC cost:", usdcCost);
-        console.log("USDT cost:", usdtCost);
+        console.log("USDS cost:", usdsCost);
         console.log("IDRX cost:", idrxCost);
     }
 
@@ -163,7 +163,7 @@ contract PaymasterTest is Test {
 
     function testIsSupportedToken() public {
         assertTrue(paymaster.isSupportedToken(address(usdc)));
-        assertTrue(paymaster.isSupportedToken(address(usdt)));
+        assertTrue(paymaster.isSupportedToken(address(usds)));
         assertTrue(paymaster.isSupportedToken(address(idrx)));
         assertFalse(paymaster.isSupportedToken(address(0x999)));
     }

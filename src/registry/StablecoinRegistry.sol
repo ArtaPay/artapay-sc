@@ -9,7 +9,7 @@ import "../interfaces/IStablecoinRegistry.sol";
 /**
  * @title StablecoinRegistry
  * @notice Registry for supported stablecoins with hardcoded exchange rates
- * @dev Manages 7 stablecoins: USDC, USDT, IDRX, JPYC, EURC, MXNT, CNHT
+ * @dev Manages 9 stablecoins: USDC, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX
  *
  * Exchange Rate Format:
  * - All rates are stored with 8 decimals precision

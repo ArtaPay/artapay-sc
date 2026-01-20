@@ -1,6 +1,6 @@
 # ArtaPay Smart Contracts
 
-Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infrastructure enabling gasless stablecoin transactions on Lisk Sepolia.
+Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infrastructure enabling gasless stablecoin transactions on Base Sepolia.
 
 ## Overview
 
@@ -8,7 +8,7 @@ ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abst
 
 - **Only time approval**: Users only need eth in the beginning for one time approval and then become gasless
 - **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
-- **Multi-Stablecoin Support**: Support for 7 stablecoins (USDC, USDT, IDRX, JPYC, EURC, MXNT, CNHT)
+- **Multi-Stablecoin Support**: Support for 9 stablecoins (USDC, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
 - **Auto-Swap**: Automatic cross-token swaps during payments
 - **Deterministic Smart Accounts**: Predictable account addresses using CREATE2
@@ -41,7 +41,7 @@ Manages stablecoin metadata and handles conversions between different tokens.
 
 **Key Features:**
 
-- Supports 7 stablecoins with hardcoded exchange rates
+- Supports 9 stablecoins with hardcoded exchange rates
 - 8 decimal precision for all rates
 - Uses USD as intermediate for conversions
 - ETH ↔ Stablecoin conversion for gas calculations
@@ -135,8 +135,8 @@ Create a `.env` file in the root directory:
 ```bash
 # Deployment & Verification
 PRIVATE_KEY=0x...
-LISK_SEPOLIA_RPC_URL=https://rpc.sepolia-api.lisk.com
-BLOCKSCOUT_API_KEY=your_api_key
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+BASESCAN_API_KEY=your_api_key
 
 # EntryPoint (ERC-4337 v0.7)
 ENTRYPOINT_ADDRESS=0x0000000071727De22E5E9d8BAf0edAc6f37da032
@@ -146,12 +146,14 @@ INITIAL_ETH_USD_RATE=300000000000  # $3000 with 8 decimals
 
 # Stablecoin Rates (8 decimal precision)
 USDC_RATE=100000000        # 1 USD
-USDT_RATE=100000000        # 1 USD
-IDRX_RATE=1600000000000    # 16,000 IDR per USD
-JPYC_RATE=15000000000      # 150 JPY per USD
+USDS_RATE=100000000        # 1 USD
 EURC_RATE=95000000         # 0.95 EUR per USD
-MXNT_RATE=2000000000000    # 20,000 MXN per USD
-CNHT_RATE=700000000        # 7 CNY per USD
+BRZ_RATE=500000000         # 5 BRL per USD
+AUDD_RATE=160000000        # 1.6 AUD per USD
+CADC_RATE=135000000        # 1.35 CAD per USD
+ZCHF_RATE=90000000         # 0.9 CHF per USD
+TGBP_RATE=80000000         # 0.8 GBP per USD
+IDRX_RATE=1600000000000    # 16,000 IDR per USD
 
 # Optional: EntryPoint deposit for gas sponsorship
 ENTRYPOINT_DEPOSIT_WEI=10000000000000000000  # 10 ETH
@@ -175,56 +177,60 @@ forge test --match-path test/Paymaster.t.sol
 ### Deploy All Contracts
 
 ```bash
-# Deploy to Lisk Sepolia
+# Deploy to Base Sepolia
 forge script script/DeployAll.s.sol \
-  --rpc-url $LISK_SEPOLIA_RPC_URL \
+  --rpc-url $BASE_SEPOLIA_RPC_URL \
   --broadcast \
   --verify
 
 # Or use the shorthand
-forge script script/DeployAll.s.sol --rpc-url lisk_sepolia --broadcast --verify
+forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
 ```
 
 ## Network Information
 
-### Lisk Sepolia Testnet
+### Base Sepolia Testnet
 
-- **Chain ID**: 4202
-- **RPC URL**: https://rpc.sepolia-api.lisk.com
-- **Block Explorer**: https://sepolia-blockscout.lisk.com
+- **Chain ID**: 84532
+- **RPC URL**: https://sepolia.base.org
+- **Block Explorer**: https://sepolia.basescan.org
 
 ## Supported Stablecoins
 
 | Symbol | Name               | Decimals | Region |
 | ------ | ------------------ | -------- | ------ |
 | USDC   | USD Coin           | 6        | US     |
-| USDT   | Tether USD         | 6        | US     |
-| IDRX   | Indonesia Rupiah   | 6        | ID     |
-| JPYC   | JPY Coin           | 8        | JP     |
-| EURC   | Euro Coin          | 6        | EU     |
-| MXNT   | Mexican Peso Token | 6        | MX     |
-| CNHT   | Chinese Yuan Token | 6        | CN     |
+| USDS   | Sky Dollar         | 6        | US     |
+| EURC   | EURC               | 6        | EU     |
+| BRZ    | Brazilian Digital  | 6        | BR     |
+| AUDD   | AUDD               | 6        | AU     |
+| CADC   | CAD Coin           | 6        | CA     |
+| ZCHF   | Frankencoin        | 6        | CH     |
+| tGBP   | Tokenised GBP      | 18       | GB     |
+| IDRX   | IDRX               | 6        | ID     |
 
 ## Contract Addresses
 
-### Lisk Sepolia (Testnet)
+### Base Sepolia (Testnet)
 
 ```
 EntryPoint:            0x0000000071727De22E5E9d8BAf0edAc6f37da032
-StablecoinRegistry:    0x682C2619E044B7200F2e6198835C934AB3a7199C
-Paymaster:             0xf6Dcf6713C4f6A87aCa8921523a093BD3C2bdd91
-StableSwap:            0x0Bf527720806AAdB8688e41Dd91E954403e0B5D4
-PaymentProcessor:      0x2Bb3C8754Bb503316F6bFC44F476afCc8EFFe606
-SimpleAccountFactory:  0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985
+StablecoinRegistry:    TBD
+Paymaster:             TBD
+StableSwap:            TBD
+PaymentProcessor:      TBD
+SimpleAccountFactory:  TBD
 
 Mock Tokens:
-  USDC:  0x2cf57816dF74172E64F812492a9B80ee96dDb1FE
-  USDT:  0xa3f3aA5B62237961AF222B211477e572149EBFAe
-  IDRX:  0xFC7E8c60315e779b1109B252fcdBFB8f3524F9B6
-  JPYC:  0xc1AD994F03A74f76e2A971e91C61e0E2A24D51a4
-  EURC:  0xF73E974a4bcbd80C70aD9BBDcf8850682F359BDB
-  MXNT:  0x58A811937A9bd10B3F1DFDA5771bC00D078CFe33
-  CNHT:  0x5f64Eb0fd7cb20539BEbDE75Ba4dEe17Ba3b7535
+  USDC:  TBD
+  USDS:  TBD
+  EURC:  TBD
+  BRZ:   TBD
+  AUDD:  TBD
+  CADC:  TBD
+  ZCHF:  TBD
+  tGBP:  TBD
+  IDRX:  TBD
 ```
 
 ## Security Considerations
