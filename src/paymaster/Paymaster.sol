@@ -59,7 +59,11 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     /// @notice Used nonces for replay protection
     mapping(bytes32 => bool) public usedNonces;
 
+    /// @notice Tracks one-time activation sponsorship per payer
+    mapping(address => bool) public activationUsed;
+
     event GasSponsored(address indexed sender, address indexed token, uint256 gasFee);
+    event ActivationSponsored(address indexed payer);
 
     event FeesWithdrawn(address indexed token, uint256 amount, address indexed to);
 
@@ -120,41 +124,52 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         whenNotPaused
         returns (bytes memory context, uint256 validationData)
     {
-        require(userOp.paymasterAndData.length >= 170, "Paymaster: invalid paymasterAndData");
+        require(userOp.paymasterAndData.length >= 171, "Paymaster: invalid paymasterAndData");
 
         address token = address(bytes20(userOp.paymasterAndData[52:72]));
         address payer = address(bytes20(userOp.paymasterAndData[72:92]));
         uint48 validUntil = uint48(bytes6(userOp.paymasterAndData[92:98]));
         uint48 validAfter = uint48(bytes6(userOp.paymasterAndData[98:104]));
         bool hasPermit = uint8(userOp.paymasterAndData[104]) == 1;
+        bool isActivation = uint8(userOp.paymasterAndData[105]) == 1;
 
         bytes memory signature;
+        uint256 cursor = 106;
 
         if (hasPermit) {
-            require(userOp.paymasterAndData.length >= 267, "Paymaster: invalid permit data");
+            require(userOp.paymasterAndData.length >= 268, "Paymaster: invalid permit data");
 
-            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[105:137]));
-            uint8 v = uint8(userOp.paymasterAndData[137]);
-            bytes32 r = bytes32(userOp.paymasterAndData[138:170]);
-            bytes32 s = bytes32(userOp.paymasterAndData[170:202]);
+            uint256 deadline = uint256(bytes32(userOp.paymasterAndData[cursor:cursor + 32]));
+            uint8 v = uint8(userOp.paymasterAndData[cursor + 32]);
+            bytes32 r = bytes32(userOp.paymasterAndData[cursor + 33:cursor + 65]);
+            bytes32 s = bytes32(userOp.paymasterAndData[cursor + 65:cursor + 97]);
 
             IERC20Permit(token).permit(payer, address(this), type(uint256).max, deadline, v, r, s);
 
-            signature = userOp.paymasterAndData[202:];
+            signature = userOp.paymasterAndData[cursor + 97:];
         } else {
-            signature = userOp.paymasterAndData[105:];
+            signature = userOp.paymasterAndData[cursor:];
         }
 
         require(supportedTokens[token], "Paymaster: token not supported");
 
         require(payer != address(0), "Paymaster: invalid payer");
 
-        bytes32 hash = keccak256(abi.encode(payer, token, validUntil, validAfter));
+        bytes32 hash = keccak256(abi.encode(payer, token, validUntil, validAfter, isActivation));
         bytes32 signedHash = hash.toEthSignedMessageHash();
         address signer = signedHash.recover(signature);
 
         if (!authorizedSigners[signer]) {
             return ("", _packValidationData(true, validUntil, validAfter));
+        }
+
+        if (isActivation) {
+            require(!activationUsed[payer], "Paymaster: activation already used");
+            require(payer == userOp.sender, "Paymaster: payer mismatch");
+            _validateActivationCallData(userOp.callData);
+            context = abi.encode(token, payer, uint256(0), true);
+            validationData = _packValidationData(false, validUntil, validAfter);
+            return (context, validationData);
         }
 
         uint256 tokenCost = _calculateTokenCost(token, maxCost);
@@ -163,7 +178,7 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
 
         require(IERC20(token).allowance(payer, address(this)) >= tokenCost, "Paymaster: insufficient allowance");
 
-        context = abi.encode(token, payer, tokenCost);
+        context = abi.encode(token, payer, tokenCost, false);
 
         validationData = _packValidationData(false, validUntil, validAfter);
 
@@ -183,7 +198,16 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         override
         onlyEntryPoint
     {
-        (address token, address payer, uint256 maxTokenCost) = abi.decode(context, (address, address, uint256));
+        (address token, address payer, uint256 maxTokenCost, bool isActivation) =
+            abi.decode(context, (address, address, uint256, bool));
+
+        if (isActivation) {
+            if (mode == PostOpMode.opSucceeded) {
+                activationUsed[payer] = true;
+            }
+            emit ActivationSponsored(payer);
+            return;
+        }
 
         uint256 actualCostWithPostOp = actualGasCost + (COST_OF_POST * actualUserOpFeePerGas);
         uint256 actualTokenCost = _calculateTokenCost(token, actualCostWithPostOp);
@@ -395,6 +419,47 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
      */
     function _packValidationData(bool sigFailed, uint48 validUntil, uint48 validAfter) internal pure returns (uint256) {
         return (sigFailed ? 1 : 0) | (uint256(validUntil) << 160) | (uint256(validAfter) << 208);
+    }
+
+    function _validateActivationCallData(bytes calldata callData) internal view {
+        require(callData.length >= 4, "Paymaster: invalid callData");
+        bytes4 selector = bytes4(callData);
+        bytes4 executeSelector = bytes4(keccak256("execute(address,uint256,bytes)"));
+        bytes4 executeBatchSelector = bytes4(keccak256("executeBatch(address[],uint256[],bytes[])"));
+        bytes4 approveSelector = bytes4(keccak256("approve(address,uint256)"));
+
+        if (selector == executeSelector) {
+            (address dest, uint256 value, bytes memory data) = abi.decode(callData[4:], (address, uint256, bytes));
+            require(value == 0, "Paymaster: nonzero value");
+            require(stablecoinRegistry.isStablecoinActive(dest), "Paymaster: token not in registry");
+            _validateApproveData(data, approveSelector);
+            return;
+        }
+
+        require(selector == executeBatchSelector, "Paymaster: only executeBatch");
+        (address[] memory dests, uint256[] memory values, bytes[] memory datas) =
+            abi.decode(callData[4:], (address[], uint256[], bytes[]));
+        require(dests.length == datas.length, "Paymaster: length mismatch");
+
+        for (uint256 i = 0; i < dests.length; i++) {
+            if (values.length != 0) {
+                require(values[i] == 0, "Paymaster: nonzero value");
+            }
+            require(stablecoinRegistry.isStablecoinActive(dests[i]), "Paymaster: token not in registry");
+            _validateApproveData(datas[i], approveSelector);
+        }
+    }
+
+    function _validateApproveData(bytes memory data, bytes4 approveSelector) internal view {
+        require(data.length >= 4 + 32 + 32, "Paymaster: invalid approve");
+        bytes4 selector;
+        address spender;
+        assembly {
+            selector := mload(add(data, 32))
+            spender := and(mload(add(data, 36)), 0xffffffffffffffffffffffffffffffffffffffff)
+        }
+        require(selector == approveSelector, "Paymaster: only approve");
+        require(spender == address(this), "Paymaster: invalid spender");
     }
 
     /**
