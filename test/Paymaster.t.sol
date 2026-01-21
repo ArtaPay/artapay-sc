@@ -246,7 +246,7 @@ contract PaymasterTest is Test {
         vm.prank(user);
         usdc.approve(address(paymaster), feeAmount * 2);
 
-        bytes memory context = abi.encode(address(usdc), user, feeAmount);
+        bytes memory context = abi.encode(address(usdc), user, feeAmount, false, false);
 
         entryPoint.callPostOp(address(paymaster), PostOpMode.opSucceeded, context, 1000, 1 gwei);
 
