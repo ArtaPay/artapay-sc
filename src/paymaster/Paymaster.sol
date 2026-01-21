@@ -167,18 +167,24 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
             require(!activationUsed[payer], "Paymaster: activation already used");
             require(payer == userOp.sender, "Paymaster: payer mismatch");
             _validateActivationCallData(userOp.callData);
-            context = abi.encode(token, payer, uint256(0), true);
+            context = abi.encode(token, payer, uint256(0), true, false);
+            validationData = _packValidationData(false, validUntil, validAfter);
+            return (context, validationData);
+        }
+
+        bool isFaucet = _isFaucetCall(userOp.callData, token);
+        if (isFaucet) {
+            require(payer == userOp.sender, "Paymaster: payer mismatch");
+            context = abi.encode(token, payer, uint256(0), false, true);
             validationData = _packValidationData(false, validUntil, validAfter);
             return (context, validationData);
         }
 
         uint256 tokenCost = _calculateTokenCost(token, maxCost);
-
         require(IERC20(token).balanceOf(payer) >= tokenCost, "Paymaster: insufficient balance");
-
         require(IERC20(token).allowance(payer, address(this)) >= tokenCost, "Paymaster: insufficient allowance");
 
-        context = abi.encode(token, payer, tokenCost, false);
+        context = abi.encode(token, payer, tokenCost, false, false);
 
         validationData = _packValidationData(false, validUntil, validAfter);
 
@@ -198,14 +204,18 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
         override
         onlyEntryPoint
     {
-        (address token, address payer, uint256 maxTokenCost, bool isActivation) =
-            abi.decode(context, (address, address, uint256, bool));
+        (address token, address payer, uint256 maxTokenCost, bool isActivation, bool isFaucet) =
+            abi.decode(context, (address, address, uint256, bool, bool));
 
         if (isActivation) {
             if (mode == PostOpMode.opSucceeded) {
                 activationUsed[payer] = true;
             }
             emit ActivationSponsored(payer);
+            return;
+        }
+
+        if (isFaucet) {
             return;
         }
 
@@ -448,6 +458,61 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
             require(stablecoinRegistry.isStablecoinActive(dests[i]), "Paymaster: token not in registry");
             _validateApproveData(datas[i], approveSelector);
         }
+    }
+
+    function _isFaucetCall(bytes calldata callData, address token) internal view returns (bool) {
+        if (callData.length < 4) {
+            return false;
+        }
+
+        bytes4 selector = bytes4(callData);
+        bytes4 executeSelector = bytes4(keccak256("execute(address,uint256,bytes)"));
+        bytes4 executeBatchSelector = bytes4(keccak256("executeBatch(address[],uint256[],bytes[])"));
+        bytes4 faucetSelector = bytes4(keccak256("faucet(uint256)"));
+
+        if (selector == executeSelector) {
+            (address dest, uint256 value, bytes memory data) = abi.decode(callData[4:], (address, uint256, bytes));
+            if (value != 0 || dest != token) {
+                return false;
+            }
+            return _isFaucetData(data, faucetSelector);
+        }
+
+        if (selector != executeBatchSelector) {
+            return false;
+        }
+
+        (address[] memory dests, uint256[] memory values, bytes[] memory datas) =
+            abi.decode(callData[4:], (address[], uint256[], bytes[]));
+
+        if (dests.length != datas.length) {
+            return false;
+        }
+
+        for (uint256 i = 0; i < dests.length; i++) {
+            if (dests[i] != token) {
+                return false;
+            }
+            if (values.length != 0 && values[i] != 0) {
+                return false;
+            }
+            if (!_isFaucetData(datas[i], faucetSelector)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    function _isFaucetData(bytes memory data, bytes4 faucetSelector) internal pure returns (bool) {
+        if (data.length < 4 + 32) {
+            return false;
+        }
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == faucetSelector;
     }
 
     function _validateApproveData(bytes memory data, bytes4 approveSelector) internal view {
