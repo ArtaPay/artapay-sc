@@ -4,15 +4,19 @@ pragma solidity ^0.8.20;
 import "../interfaces/IERC4337.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title SimpleAccount
  * @notice Minimal ERC-4337 smart account compatible with EntryPoint v0.7
  * @dev Owner-signature based account
  */
-contract SimpleAccount is IAccount {
+contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
+
+    uint256 private constant SIG_VALIDATION_FAILED = 1;
 
     address public owner;
     IEntryPoint public immutable entryPoint;
@@ -27,21 +31,28 @@ contract SimpleAccount is IAccount {
 
     /// @notice Restricts function to owner only
     modifier onlyOwner() {
-        require(msg.sender == owner, "SimpleAccount: not owner");
+        _onlyOwner();
         _;
     }
 
     /**
-     * @notice Initialize the smart account
+     * @notice Initialize the implementation
      * @param _entryPoint ERC-4337 EntryPoint address
+     */
+    constructor(IEntryPoint _entryPoint) {
+        require(address(_entryPoint) != address(0), "SimpleAccount: invalid entrypoint");
+        entryPoint = _entryPoint;
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize the smart account
      * @param _owner Owner address for this account
      */
-    constructor(IEntryPoint _entryPoint, address _owner) {
-        require(address(_entryPoint) != address(0), "SimpleAccount: invalid entrypoint");
+    function initialize(address _owner) public initializer {
         require(_owner != address(0), "SimpleAccount: invalid owner");
-        entryPoint = _entryPoint;
         owner = _owner;
-        emit SimpleAccountInitialized(_owner, address(_entryPoint));
+        emit SimpleAccountInitialized(_owner, address(entryPoint));
     }
 
     /**
@@ -50,19 +61,31 @@ contract SimpleAccount is IAccount {
      * @param value ETH value to send
      * @param func Calldata to execute
      */
-    function execute(address dest, uint256 value, bytes calldata func) external onlyOwner {
+    function execute(address dest, uint256 value, bytes calldata func) external {
+        _requireFromEntryPointOrOwner();
         _call(dest, value, func);
     }
 
     /**
      * @notice Execute multiple calls
      * @param dest Array of destination addresses
+     * @param value Array of ETH values (empty array = all zero)
      * @param func Array of calldata
      */
-    function executeBatch(address[] calldata dest, bytes[] calldata func) external onlyOwner {
-        require(dest.length == func.length, "SimpleAccount: length mismatch");
+    function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func) external {
+        _requireFromEntryPointOrOwner();
+        require(
+            dest.length == func.length && (value.length == 0 || value.length == func.length),
+            "SimpleAccount: length mismatch"
+        );
+        if (value.length == 0) {
+            for (uint256 i = 0; i < dest.length; i++) {
+                _call(dest[i], 0, func[i]);
+            }
+            return;
+        }
         for (uint256 i = 0; i < dest.length; i++) {
-            _call(dest[i], 0, func[i]);
+            _call(dest[i], value[i], func[i]);
         }
     }
 
@@ -79,7 +102,9 @@ contract SimpleAccount is IAccount {
         onlyEntryPoint
         returns (uint256 validationData)
     {
-        _validateSignature(userOpHash, userOp.signature);
+        if (!_validateSignature(userOpHash, userOp.signature)) {
+            return SIG_VALIDATION_FAILED;
+        }
 
         if (missingAccountFunds > 0) {
             entryPoint.depositTo{value: missingAccountFunds}(address(this));
@@ -116,10 +141,23 @@ contract SimpleAccount is IAccount {
      * @param userOpHash Hash to validate
      * @param signature Signature to check
      */
-    function _validateSignature(bytes32 userOpHash, bytes calldata signature) internal view {
+    function _validateSignature(bytes32 userOpHash, bytes calldata signature) internal view returns (bool) {
         bytes32 digest = userOpHash.toEthSignedMessageHash();
         address signer = ECDSA.recover(digest, signature);
-        require(signer == owner, "SimpleAccount: invalid signature");
+        return signer == owner;
+    }
+
+    function _onlyOwner() internal view {
+        require(msg.sender == owner || msg.sender == address(this), "SimpleAccount: not owner");
+    }
+
+    function _requireFromEntryPointOrOwner() internal view {
+        require(msg.sender == address(entryPoint) || msg.sender == owner, "SimpleAccount: not owner");
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal view override {
+        newImplementation;
+        _onlyOwner();
     }
 
     /**

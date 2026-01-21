@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/account/SimpleAccount.sol";
 import "../src/interfaces/IERC4337.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
@@ -61,8 +62,10 @@ contract SimpleAccountTest is Test {
 
         entryPoint = new MockEntryPoint();
 
-        vm.prank(owner);
-        account = new SimpleAccount(IEntryPoint(address(entryPoint)), owner);
+        SimpleAccount implementation = new SimpleAccount(IEntryPoint(address(entryPoint)));
+        account = SimpleAccount(
+            payable(new ERC1967Proxy(address(implementation), abi.encodeCall(SimpleAccount.initialize, (owner))))
+        );
 
         vm.deal(address(account), 10 ether);
     }
@@ -74,12 +77,13 @@ contract SimpleAccountTest is Test {
 
     function testCannotDeployWithZeroEntryPoint() public {
         vm.expectRevert("SimpleAccount: invalid entrypoint");
-        new SimpleAccount(IEntryPoint(address(0)), owner);
+        new SimpleAccount(IEntryPoint(address(0)));
     }
 
     function testCannotDeployWithZeroOwner() public {
+        SimpleAccount implementation = new SimpleAccount(IEntryPoint(address(entryPoint)));
         vm.expectRevert("SimpleAccount: invalid owner");
-        new SimpleAccount(IEntryPoint(address(entryPoint)), address(0));
+        new ERC1967Proxy(address(implementation), abi.encodeCall(SimpleAccount.initialize, (address(0))));
     }
 
     function testExecuteAsOwner() public {
@@ -112,6 +116,7 @@ contract SimpleAccountTest is Test {
     function testExecuteBatch() public {
         address[] memory destinations = new address[](2);
         bytes[] memory calldatas = new bytes[](2);
+        uint256[] memory values = new uint256[](0);
 
         destinations[0] = recipient;
         destinations[1] = recipient;
@@ -121,7 +126,7 @@ contract SimpleAccountTest is Test {
         uint256 recipientBalanceBefore = recipient.balance;
 
         vm.prank(owner);
-        account.executeBatch(destinations, calldatas);
+        account.executeBatch(destinations, values, calldatas);
 
         assertEq(recipient.balance, recipientBalanceBefore);
     }
@@ -129,6 +134,7 @@ contract SimpleAccountTest is Test {
     function testExecuteBatchLengthMismatch() public {
         address[] memory destinations = new address[](2);
         bytes[] memory calldatas = new bytes[](1);
+        uint256[] memory values = new uint256[](2);
 
         destinations[0] = recipient;
         destinations[1] = recipient;
@@ -136,7 +142,7 @@ contract SimpleAccountTest is Test {
 
         vm.prank(owner);
         vm.expectRevert("SimpleAccount: length mismatch");
-        account.executeBatch(destinations, calldatas);
+        account.executeBatch(destinations, values, calldatas);
     }
 
     function testValidateUserOp() public {

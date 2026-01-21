@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 import "./SimpleAccount.sol";
 import "../interfaces/IERC4337.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title SimpleAccountFactory
@@ -12,6 +14,8 @@ import "../interfaces/IERC4337.sol";
 contract SimpleAccountFactory {
     /// @notice ERC-4337 EntryPoint contract address
     IEntryPoint public immutable entryPoint;
+    /// @notice SimpleAccount implementation used by proxies
+    SimpleAccount public immutable accountImplementation;
 
     /**
      * @notice Emitted when a new account is created
@@ -28,6 +32,7 @@ contract SimpleAccountFactory {
     constructor(IEntryPoint _entryPoint) {
         require(address(_entryPoint) != address(0), "Factory: invalid entrypoint");
         entryPoint = _entryPoint;
+        accountImplementation = new SimpleAccount(_entryPoint);
     }
 
     /**
@@ -42,7 +47,11 @@ contract SimpleAccountFactory {
             return SimpleAccount(payable(predicted));
         }
 
-        account = new SimpleAccount{salt: bytes32(salt)}(entryPoint, owner);
+        account = SimpleAccount(
+            payable(new ERC1967Proxy{salt: bytes32(salt)}(
+                    address(accountImplementation), abi.encodeCall(SimpleAccount.initialize, (owner))
+                ))
+        );
         emit AccountCreated(address(account), owner, salt);
     }
 
@@ -53,10 +62,11 @@ contract SimpleAccountFactory {
      * @return Predicted address of the account
      */
     function getAddress(address owner, uint256 salt) public view returns (address) {
-        bytes32 bytecodeHash =
-            keccak256(abi.encodePacked(type(SimpleAccount).creationCode, abi.encode(entryPoint, owner)));
-        bytes32 _data = keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(salt), bytecodeHash));
-        return address(uint160(uint256(_data)));
+        bytes memory initData = abi.encodeCall(SimpleAccount.initialize, (owner));
+        bytes32 bytecodeHash = keccak256(
+            abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(accountImplementation), initData))
+        );
+        return Create2.computeAddress(bytes32(salt), bytecodeHash, address(this));
     }
 
     /**
