@@ -6,7 +6,7 @@ Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infra
 
 ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abstraction to provide:
 
-- **Only time approval**: Users only need eth in the beginning for one time approval and then become gasless
+- **One-time approval**: Users approve once, then all future transactions are gasless
 - **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
 - **Multi-Stablecoin Support**: Support for 9 stablecoins (USDC, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
@@ -35,7 +35,7 @@ The central contract for sponsoring gas fees and collecting payment in stablecoi
 - `postOp()` - Collects fees in stablecoins after execution
 - `calculateFee()` - Calculates stablecoin cost for ETH gas
 
-#### 2. **StablecoinRegistry.sol** - Rate & Conversion Registry
+#### 2. **StablecoinRegistry.sol** - Rate and Conversion Registry
 
 Manages stablecoin metadata and handles conversions between different tokens.
 
@@ -44,7 +44,7 @@ Manages stablecoin metadata and handles conversions between different tokens.
 - Supports 9 stablecoins with hardcoded exchange rates
 - 8 decimal precision for all rates
 - Uses USD as intermediate for conversions
-- ETH ↔ Stablecoin conversion for gas calculations
+- ETH <-> Stablecoin conversion for gas calculations
 - Rate change limits (50% max per update)
 
 **Main Functions:**
@@ -115,7 +115,7 @@ Factory for deploying deterministic smart accounts using CREATE2.
 | Platform Fee   | 0.3% (30 BPS) | Payer   | Stablecoin |
 | Swap Fee       | 0.1% (10 BPS) | Payer   | Stablecoin |
 
-## Setup & Installation
+## Setup and Installation
 
 ### Installation
 
@@ -133,7 +133,7 @@ forge install
 Create a `.env` file in the root directory:
 
 ```bash
-# Deployment & Verification
+# Deployment and Verification
 PRIVATE_KEY=0x...
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
 BASESCAN_API_KEY=your_api_key
@@ -169,7 +169,6 @@ forge test
 
 # Run specific test file
 forge test --match-path test/Paymaster.t.sol
-
 ```
 
 ## Deployment
@@ -193,7 +192,7 @@ forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
 
 - **Chain ID**: 84532
 - **RPC URL**: https://sepolia.base.org
-- **Block Explorer**: https://sepolia.basescan.org
+- **Block Explorer**: https://base-sepolia.blockscout.com
 
 ## Supported Stablecoins
 
@@ -215,22 +214,22 @@ forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
 
 ```
 EntryPoint:            0x0000000071727De22E5E9d8BAf0edAc6f37da032
-StablecoinRegistry:    TBD
-Paymaster:             TBD
-StableSwap:            TBD
-PaymentProcessor:      TBD
-SimpleAccountFactory:  TBD
+StablecoinRegistry:    0x573f4D2b5e9E5157693a9Cc0008FcE4e7167c584
+Paymaster:             0x1b14BF9ab47069a77c70Fb0ac02Bcb08A9Ffe290
+StableSwap:            0x822e1dfb7bf410249b2bE39809A5Ae0cbfae612f
+PaymentProcessor:      0x4D053b241a91c4d8Cd86D0815802F69D34a0164B
+SimpleAccountFactory:  0xfEA9DD0034044C330c0388756Fd643A5015d94D2
 
 Mock Tokens:
-  USDC:  TBD
-  USDS:  TBD
-  EURC:  TBD
-  BRZ:   TBD
-  AUDD:  TBD
-  CADC:  TBD
-  ZCHF:  TBD
-  tGBP:  TBD
-  IDRX:  TBD
+  USDC:  0x74FB067E49CBd0f97Dc296919e388CB3CFB62b4D
+  USDS:  0x79f3293099e96b840A0423B58667Bc276Ea19aC0
+  EURC:  0xfF4dD486832201F6DC41126b541E3b47DC353438
+  BRZ:   0x9d30F685C04f024f84D9A102d0fE8dF348aE7E7d
+  AUDD:  0x9f6b8aF49747304Ce971e2b9d131B2bcd1841d83
+  CADC:  0x6BB3FFD9279fBE76FE0685Df7239c23488bC96e4
+  ZCHF:  0xF27edF22FD76A044eA5B77E1958863cf9A356132
+  tGBP:  0xb4db79424725256a6E6c268fc725979b24171857
+  IDRX:  0x34976B6c7Aebe7808c7Cab34116461EB381Bc2F8
 ```
 
 ## Security Considerations
@@ -246,7 +245,7 @@ Mock Tokens:
 
 This project uses:
 
-- Solidity 0.8.31 Cancun
+- Solidity 0.8.31 (Cancun)
 - Foundry for testing and deployment
 - OpenZeppelin contracts for standards
 
@@ -254,17 +253,17 @@ This project uses:
 
 ```
 artapay-sc/
-├── src/
-│   ├── account/          # ERC-4337 Smart Account contracts
-│   ├── interfaces/       # Contract interfaces
-│   ├── paymaster/        # Paymaster contract
-│   ├── payment/          # Payment processing contracts
-│   ├── registry/         # Stablecoin registry
-│   ├── swap/             # Swap pool contracts
-│   └── token/            # Mock token contracts
-├── test/                 # Test files
-├── script/               # Deployment scripts
-└── foundry.toml          # Foundry configuration
+- src/               # Smart contracts
+  - account/         # ERC-4337 Smart Account contracts
+  - interfaces/      # Contract interfaces
+  - paymaster/       # Paymaster contract
+  - payment/         # Payment processing contracts
+  - registry/        # Stablecoin registry
+  - swap/            # Swap pool contracts
+  - token/           # Mock token contracts
+- test/              # Test files
+- script/            # Deployment scripts
+- foundry.toml       # Foundry configuration
 ```
 
 ## License
