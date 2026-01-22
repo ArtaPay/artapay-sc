@@ -44,6 +44,9 @@ interface IEntryPoint {
     function getNonce(address sender, uint192 key) external view returns (uint256);
     function depositTo(address account) external payable;
     function withdrawTo(address payable withdrawAddress, uint256 withdrawAmount) external;
+    function addStake(uint32 unstakeDelaySec) external payable;
+    function unlockStake() external;
+    function withdrawStake(address payable withdrawAddress) external;
     function getDepositInfo(address account)
         external
         view

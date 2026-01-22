@@ -72,6 +72,9 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     event RegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
     event Deposited(address indexed account, uint256 amount);
     event Withdrawn(address indexed account, uint256 amount);
+    event StakeAdded(uint256 amount, uint32 unstakeDelaySec);
+    event StakeUnlocked();
+    event StakeWithdrawn(address indexed account, uint256 amount);
 
     error InvalidEntryPoint();
     error InvalidToken();
@@ -237,6 +240,32 @@ contract Paymaster is IPaymaster, Ownable, ReentrancyGuard, Pausable {
     function deposit() external payable onlyOwner {
         entryPoint.depositTo{value: msg.value}(address(this));
         emit Deposited(address(this), msg.value);
+    }
+
+    /**
+     * @notice Stake ETH in EntryPoint for paymaster reputation
+     * @param unstakeDelaySec Unstake delay in seconds
+     */
+    function addStake(uint32 unstakeDelaySec) external payable onlyOwner {
+        entryPoint.addStake{value: msg.value}(unstakeDelaySec);
+        emit StakeAdded(msg.value, unstakeDelaySec);
+    }
+
+    /**
+     * @notice Start stake unlock period in EntryPoint
+     */
+    function unlockStake() external onlyOwner {
+        entryPoint.unlockStake();
+        emit StakeUnlocked();
+    }
+
+    /**
+     * @notice Withdraw stake from EntryPoint after unlock delay
+     * @param withdrawAddress Address to receive ETH
+     */
+    function withdrawStake(address payable withdrawAddress) external onlyOwner {
+        entryPoint.withdrawStake(withdrawAddress);
+        emit StakeWithdrawn(withdrawAddress, 0);
     }
 
     /**

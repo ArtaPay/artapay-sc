@@ -176,13 +176,26 @@ contract DeployAll is Script {
         paymaster.addSupportedTokens(tokens);
         console.log("Added 9 supported tokens to Paymaster");
 
-        // Deposit ETH to EntryPoint for gas sponsorship (if specified)
-        uint256 depositWei = vm.envOr("ENTRYPOINT_DEPOSIT_WEI", uint256(0));
-        if (depositWei > 0) {
-            paymaster.deposit{value: depositWei}();
-            console.log("Deposited to EntryPoint:", depositWei, "wei");
+        // Deposit + stake ETH to EntryPoint for gas sponsorship (if specified)
+        uint256 totalWei = vm.envOr("ENTRYPOINT_DEPOSIT_WEI", uint256(0));
+        if (totalWei > 0) {
+            uint256 stakeWei = totalWei / 2;
+            uint256 depositWei = totalWei - stakeWei;
+
+            if (depositWei > 0) {
+                paymaster.deposit{value: depositWei}();
+                console.log("Deposited to EntryPoint:", depositWei, "wei");
+            }
+
+            if (stakeWei > 0) {
+                uint256 unstakeDelay = vm.envOr("ENTRYPOINT_UNSTAKE_DELAY_SEC", uint256(86400));
+                require(unstakeDelay <= type(uint32).max, "ENTRYPOINT_UNSTAKE_DELAY_SEC too large");
+                paymaster.addStake{value: stakeWei}(uint32(unstakeDelay));
+                console.log("Staked in EntryPoint:", stakeWei, "wei");
+                console.log("Unstake delay:", unstakeDelay, "sec");
+            }
         } else {
-            console.log("Skipping EntryPoint deposit (ENTRYPOINT_DEPOSIT_WEI not set)");
+            console.log("Skipping EntryPoint deposit/stake (ENTRYPOINT_DEPOSIT_WEI not set)");
         }
 
         console.log("\n=== Step 6: Deploying StableSwap ===");
