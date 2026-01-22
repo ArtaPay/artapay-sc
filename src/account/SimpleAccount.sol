@@ -2,8 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IERC4337.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
@@ -16,6 +17,11 @@ contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
     using MessageHashUtils for bytes32;
 
     uint256 private constant SIG_VALIDATION_FAILED = 1;
+    bytes32 private constant _DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    bytes32 private constant _CSW_TYPEHASH = keccak256("CoinbaseSmartWalletMessage(bytes32 hash)");
+    bytes32 private constant _CSW_NAME_HASH = keccak256("Coinbase Smart Wallet");
+    bytes32 private constant _CSW_VERSION_HASH = keccak256("1");
 
     address public owner;
     IEntryPoint public immutable entryPoint;
@@ -141,11 +147,35 @@ contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
      * @param signature Signature to check
      */
     function _validateSignature(bytes32 userOpHash, bytes calldata signature) internal view returns (bool) {
-        if (SignatureChecker.isValidSignatureNow(owner, userOpHash, signature)) {
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(userOpHash, signature);
+        if (err == ECDSA.RecoverError.NoError && recovered == owner) {
             return true;
         }
+
         bytes32 digest = userOpHash.toEthSignedMessageHash();
-        return SignatureChecker.isValidSignatureNow(owner, digest, signature);
+        (address recoveredEth, ECDSA.RecoverError errEth,) = ECDSA.tryRecover(digest, signature);
+        if (errEth == ECDSA.RecoverError.NoError && recoveredEth == owner) {
+            return true;
+        }
+
+        if (_isValidERC1271Signature(userOpHash, signature)) {
+            return true;
+        }
+
+        bytes32 cswDigest = _coinbaseSmartWalletDigest(userOpHash);
+        if (_isValidERC1271Signature(cswDigest, signature)) {
+            return true;
+        }
+
+        (bool ok, bytes memory data) = owner.staticcall(abi.encodeWithSignature("replaySafeHash(bytes32)", userOpHash));
+        if (ok && data.length == 32) {
+            bytes32 replaySafeHash = abi.decode(data, (bytes32));
+            if (_isValidERC1271Signature(replaySafeHash, signature)) {
+                return true;
+            }
+        }
+
+        return _isValidERC1271Signature(digest, signature);
     }
 
     function _onlyOwner() internal view {
@@ -174,6 +204,19 @@ contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
                 revert(add(result, 32), mload(result))
             }
         }
+    }
+
+    function _isValidERC1271Signature(bytes32 hash, bytes calldata signature) internal view returns (bool) {
+        (bool ok, bytes memory result) =
+            owner.staticcall(abi.encodeWithSelector(IERC1271.isValidSignature.selector, hash, signature));
+        return ok && result.length >= 4 && bytes4(result) == IERC1271.isValidSignature.selector;
+    }
+
+    function _coinbaseSmartWalletDigest(bytes32 userOpHash) internal view returns (bytes32) {
+        bytes32 domainSeparator =
+            keccak256(abi.encode(_DOMAIN_TYPEHASH, _CSW_NAME_HASH, _CSW_VERSION_HASH, block.chainid, owner));
+        bytes32 structHash = keccak256(abi.encode(_CSW_TYPEHASH, userOpHash));
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 
     /// @notice Accept ETH transfers
