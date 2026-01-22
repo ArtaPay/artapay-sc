@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IERC4337.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
@@ -13,7 +13,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
  * @dev Owner-signature based account
  */
 contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
-    using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
     uint256 private constant SIG_VALIDATION_FAILED = 1;
@@ -142,9 +141,11 @@ contract SimpleAccount is IAccount, Initializable, UUPSUpgradeable {
      * @param signature Signature to check
      */
     function _validateSignature(bytes32 userOpHash, bytes calldata signature) internal view returns (bool) {
+        if (SignatureChecker.isValidSignatureNow(owner, userOpHash, signature)) {
+            return true;
+        }
         bytes32 digest = userOpHash.toEthSignedMessageHash();
-        address signer = ECDSA.recover(digest, signature);
-        return signer == owner;
+        return SignatureChecker.isValidSignatureNow(owner, digest, signature);
     }
 
     function _onlyOwner() internal view {
