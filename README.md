@@ -24,7 +24,7 @@ The central contract for sponsoring gas fees and collecting payment in stablecoi
 **Key Features:**
 
 - ERC-4337 v0.7 compatible
-- Works with Gelato Bundler
+- Works with Pimlico Bundler
 - Supports ERC-2612 Permit for gasless approvals
 - 5% gas fee markup (configurable)
 - Multi-token support via StablecoinRegistry
