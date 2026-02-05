@@ -10,6 +10,7 @@ ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abst
 - **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
 - **Multi-Stablecoin Support**: Support for 9 stablecoins (USDC, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
+- **QRIS Supported**: Pay to QRIS (Quick Response Code Indonesian Standard)
 - **Auto-Swap**: Automatic cross-token swaps during payments
 - **Deterministic Smart Accounts**: Predictable account addresses using CREATE2
 
@@ -53,7 +54,25 @@ Manages stablecoin metadata and handles conversions between different tokens.
 - `ethToToken()` - Convert ETH amount to stablecoin for gas fees
 - `updateRate()` - Update exchange rates (owner only)
 
-#### 3. **PaymentProcessor.sol** - Payment Request Handler
+#### 3. **QRISRegistry.sol** - QRIS Registry
+
+Binds QRIS hashes to ArtaPay Smart Accounts with whitelist-based onboarding.
+
+**Key Features:**
+
+- One SA can register only one QRIS hash
+- Whitelist gating for merchant onboarding
+- Admin-managed revoke (remove) for disputes or updates
+- Stores merchant metadata (name, id, city)
+
+**Main Functions:**
+
+- `registerQris()` - Register QRIS hash to caller SA (whitelisted only)
+- `setWhitelist()` - Add/remove SA from whitelist (admin only)
+- `removeQris()` - Remove QRIS binding (admin only)
+- `getQris()` / `getQrisBySa()` - Lookup registry data
+
+#### 4. **PaymentProcessor.sol** - Payment Request Handler
 
 Processes QR-based payment requests with off-chain merchant signatures.
 
@@ -70,7 +89,7 @@ Processes QR-based payment requests with off-chain merchant signatures.
 - `executePayment()` - Execute payment with merchant signature
 - `calculatePaymentCost()` - Calculate total cost including fees
 
-#### 4. **StableSwap.sol** - Liquidity Pool
+#### 5. **StableSwap.sol** - Liquidity Pool
 
 Owner-managed liquidity pool for stablecoin swaps.
 
@@ -87,7 +106,7 @@ Owner-managed liquidity pool for stablecoin swaps.
 - `getSwapQuote()` - Get swap quote without execution
 - `deposit()` / `withdraw()` - Manage liquidity (owner only)
 
-#### 5. **SimpleAccount.sol** - ERC-4337 Smart Account
+#### 6. **SimpleAccount.sol** - ERC-4337 Smart Account
 
 Minimal smart account implementation with owner-signature validation.
 
@@ -98,7 +117,7 @@ Minimal smart account implementation with owner-signature validation.
 - Single-owner signature validation
 - Batch execution support
 
-#### 6. **SimpleAccountFactory.sol** - Smart Account Factory
+#### 7. **SimpleAccountFactory.sol** - Smart Account Factory
 
 Factory for deploying deterministic smart accounts using CREATE2.
 
@@ -219,6 +238,7 @@ Paymaster:             0x1b14BF9ab47069a77c70Fb0ac02Bcb08A9Ffe290
 StableSwap:            0x822e1dfb7bf410249b2bE39809A5Ae0cbfae612f
 PaymentProcessor:      0x4D053b241a91c4d8Cd86D0815802F69D34a0164B
 SimpleAccountFactory:  0xfEA9DD0034044C330c0388756Fd643A5015d94D2
+QRISRegistry:          0x5268D80f943288bBe50fc20142e09EcC9B6b1F3e
 
 Mock Tokens:
   USDC:  0x74FB067E49CBd0f97Dc296919e388CB3CFB62b4D

@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "../src/token/MockStableCoin.sol";
 import "../src/registry/StablecoinRegistry.sol";
+import "../src/registry/QRISRegistry.sol";
 import "../src/paymaster/Paymaster.sol";
 import "../src/swap/StableSwap.sol";
 import "../src/payment/PaymentProcessor.sol";
@@ -28,6 +29,7 @@ contract DeployAll is Script {
     MockStableCoin public idrx;
 
     StablecoinRegistry public registry;
+    QRISRegistry public qrisRegistry;
     Paymaster public paymaster;
     StableSwap public stableSwap;
     PaymentProcessor public paymentProcessor;
@@ -112,7 +114,12 @@ contract DeployAll is Script {
         registry.setEthUsdRate(vm.envUint("INITIAL_ETH_USD_RATE"));
         console.log("ETH/USD rate set to:", vm.envUint("INITIAL_ETH_USD_RATE"));
 
-        console.log("\n=== Step 4: Registering Stablecoins ===");
+        console.log("\n=== Step 4: Deploying QRISRegistry ===");
+
+        qrisRegistry = new QRISRegistry();
+        console.log("QRISRegistry deployed at:", address(qrisRegistry));
+
+        console.log("\n=== Step 5: Registering Stablecoins ===");
 
         address[] memory tokens = new address[](9);
         string[] memory symbols = new string[](9);
@@ -167,7 +174,7 @@ contract DeployAll is Script {
         registry.batchRegisterStablecoins(tokens, symbols, regions, rates);
         console.log("Registered 9 stablecoins in registry");
 
-        console.log("\n=== Step 5: Deploying Paymaster ===");
+        console.log("\n=== Step 6: Deploying Paymaster ===");
 
         paymaster = new Paymaster(vm.envAddress("ENTRYPOINT_ADDRESS"), address(registry));
         console.log("Paymaster deployed at:", address(paymaster));
@@ -198,7 +205,7 @@ contract DeployAll is Script {
             console.log("Skipping EntryPoint deposit/stake (ENTRYPOINT_DEPOSIT_WEI not set)");
         }
 
-        console.log("\n=== Step 6: Deploying StableSwap ===");
+        console.log("\n=== Step 7: Deploying StableSwap ===");
 
         stableSwap = new StableSwap(address(registry));
         console.log("StableSwap deployed at:", address(stableSwap));
@@ -215,7 +222,7 @@ contract DeployAll is Script {
             console.log("Added", symbols[i], "liquidity:", liquidityAmount);
         }
 
-        console.log("\n=== Step 7: Deploying PaymentProcessor ===");
+        console.log("\n=== Step 8: Deploying PaymentProcessor ===");
 
         paymentProcessor = new PaymentProcessor(
             address(stableSwap),
@@ -225,7 +232,7 @@ contract DeployAll is Script {
         console.log("PaymentProcessor deployed at:", address(paymentProcessor));
         console.log("Fee recipient set to:", deployer);
 
-        console.log("\n=== Step 8: Deploying SimpleAccountFactory ===");
+        console.log("\n=== Step 9: Deploying SimpleAccountFactory ===");
 
         accountFactory = new SimpleAccountFactory(IEntryPoint(vm.envAddress("ENTRYPOINT_ADDRESS")));
         console.log("SimpleAccountFactory deployed at:", address(accountFactory));
@@ -251,6 +258,7 @@ contract DeployAll is Script {
 
         console.log("\nCore Contracts:");
         console.log("  StablecoinRegistry:", address(registry));
+        console.log("  QRISRegistry:", address(qrisRegistry));
         console.log("  Paymaster:", address(paymaster));
         console.log("  StableSwap:", address(stableSwap));
         console.log("  PaymentProcessor:", address(paymentProcessor));
@@ -264,6 +272,7 @@ contract DeployAll is Script {
         console.log("   COPY TO .env FILE");
         console.log("========================================\n");
         console.log("STABLECOIN_REGISTRY_ADDRESS=%s", address(registry));
+        console.log("QRIS_REGISTRY_ADDRESS=%s", address(qrisRegistry));
         console.log("PAYMASTER_ADDRESS=%s", address(paymaster));
         console.log("STABLE_SWAP_ADDRESS=%s", address(stableSwap));
         console.log("PAYMENT_PROCESSOR_ADDRESS=%s", address(paymentProcessor));
