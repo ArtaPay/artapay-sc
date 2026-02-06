@@ -8,7 +8,7 @@ ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abst
 
 - **One-time approval**: Users approve once, then all future transactions are gasless
 - **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
-- **Multi-Stablecoin Support**: Support for 9 stablecoins (USDC, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
+- **Multi-Stablecoin Support**: Support for 10 stablecoins (USDC, USDT, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
 - **QRIS Supported**: Pay to QRIS (Quick Response Code Indonesian Standard)
 - **Auto-Swap**: Automatic cross-token swaps during payments
@@ -42,7 +42,7 @@ Manages stablecoin metadata and handles conversions between different tokens.
 
 **Key Features:**
 
-- Supports 9 stablecoins with hardcoded exchange rates
+- Supports 10 stablecoins with hardcoded exchange rates
 - 8 decimal precision for all rates
 - Uses USD as intermediate for conversions
 - ETH <-> Stablecoin conversion for gas calculations
@@ -283,9 +283,11 @@ Mock Tokens:
   ZCHF:  0xF27edF22FD76A044eA5B77E1958863cf9A356132
   tGBP:  0xb4db79424725256a6E6c268fc725979b24171857
   IDRX:  0x34976B6c7Aebe7808c7Cab34116461EB381Bc2F8
+```
 
 ### Etherlink Shadownet (Testnet)
 
+```
 EntryPoint:            0x0000000071727De22E5E9d8BAf0edAc6f37da032
 StablecoinRegistry:    0x02076D7C410f09CE220435f6e18672Be70A15b67
 Paymaster:             0x94A0b7E05E07b507BF4e2870DD7B428a148C7eCb
