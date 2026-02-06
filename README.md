@@ -1,6 +1,6 @@
 # ArtaPay Smart Contracts
 
-Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infrastructure enabling gasless stablecoin transactions on Base Sepolia.
+Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infrastructure enabling gasless stablecoin transactions on Base Sepolia and Etherlink Shadownet.
 
 ## Overview
 
@@ -61,15 +61,12 @@ Binds QRIS hashes to ArtaPay Smart Accounts with whitelist-based onboarding.
 **Key Features:**
 
 - One SA can register only one QRIS hash
-- Whitelist gating for merchant onboarding
-- Admin-managed revoke (remove) for disputes or updates
 - Stores merchant metadata (name, id, city)
 
 **Main Functions:**
 
-- `registerQris()` - Register QRIS hash to caller SA (whitelisted only)
-- `setWhitelist()` - Add/remove SA from whitelist (admin only)
-- `removeQris()` - Remove QRIS binding (admin only)
+- `registerQris()` - Register QRIS hash to caller SA
+- `removeQris()` - Remove QRIS binding
 - `getQris()` / `getQrisBySa()` - Lookup registry data
 
 #### 4. **PaymentProcessor.sol** - Payment Request Handler
@@ -155,9 +152,11 @@ Create a `.env` file in the root directory:
 # Deployment and Verification
 PRIVATE_KEY=0x...
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+ETHERLINK_SHADOWNET_RPC_URL=https://node.shadownet.etherlink.com
 BASESCAN_API_KEY=your_api_key
 
 # EntryPoint (ERC-4337 v0.7)
+# Update this address to match the target network you deploy to.
 ENTRYPOINT_ADDRESS=0x0000000071727De22E5E9d8BAf0edAc6f37da032
 
 # Initial Configuration
@@ -166,6 +165,7 @@ INITIAL_ETH_USD_RATE=300000000000  # $3000 with 8 decimals
 # Stablecoin Rates (8 decimal precision)
 USDC_RATE=100000000        # 1 USD
 USDS_RATE=100000000        # 1 USD
+USDT_RATE=100000000        # 1 USD
 EURC_RATE=95000000         # 0.95 EUR per USD
 BRZ_RATE=500000000         # 5 BRL per USD
 AUDD_RATE=160000000        # 1.6 AUD per USD
@@ -203,6 +203,22 @@ forge script script/DeployAll.s.sol \
 
 # Or use the shorthand
 forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
+
+# Deploy to Etherlink Shadownet (EVM Osaka)
+# Use DeployEtherlink.s.sol if you only want USDC, USDT, and IDRX.
+forge script script/DeployAll.s.sol \
+  --rpc-url $ETHERLINK_SHADOWNET_RPC_URL \
+  --broadcast \
+  --profile etherlink
+
+# Or use the shorthand
+forge script script/DeployAll.s.sol --rpc-url etherlink_shadownet --broadcast --profile etherlink
+
+# Deploy to Etherlink Shadownet (USDC, USDT, IDRX only)
+forge script script/DeployEtherlink.s.sol \
+  --rpc-url $ETHERLINK_SHADOWNET_RPC_URL \
+  --broadcast \
+  --profile etherlink
 ```
 
 ## Network Information
@@ -213,7 +229,16 @@ forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
 - **RPC URL**: https://sepolia.base.org
 - **Block Explorer**: https://base-sepolia.blockscout.com
 
+### Etherlink Shadownet Testnet
+
+- **Chain ID**: 127823
+- **RPC URL**: https://node.shadownet.etherlink.com
+- **Block Explorer**: https://shadownet.explorer.etherlink.com
+- **Faucet**: https://shadownet.faucet.etherlink.com/
+
 ## Supported Stablecoins
+
+### Base Sepolia
 
 | Symbol | Name               | Decimals | Region |
 | ------ | ------------------ | -------- | ------ |
@@ -227,6 +252,14 @@ forge script script/DeployAll.s.sol --rpc-url base_sepolia --broadcast --verify
 | tGBP   | Tokenised GBP      | 18       | GB     |
 | IDRX   | IDRX               | 6        | ID     |
 
+### Etherlink Shadownet
+
+| Symbol | Name          | Decimals | Region |
+| ------ | ------------- | -------- | ------ |
+| USDC   | USD Coin      | 6        | US     |
+| USDT   | Tether USD    | 6        | US     |
+| IDRX   | IDRX          | 6        | ID     |
+
 ## Contract Addresses
 
 ### Base Sepolia (Testnet)
@@ -238,7 +271,7 @@ Paymaster:             0x1b14BF9ab47069a77c70Fb0ac02Bcb08A9Ffe290
 StableSwap:            0x822e1dfb7bf410249b2bE39809A5Ae0cbfae612f
 PaymentProcessor:      0x4D053b241a91c4d8Cd86D0815802F69D34a0164B
 SimpleAccountFactory:  0xfEA9DD0034044C330c0388756Fd643A5015d94D2
-QRISRegistry:          0x5268D80f943288bBe50fc20142e09EcC9B6b1F3e
+QRISRegistry:          0x243826f0f2487c0D0B07Cb313080BE76818F4aa2
 
 Mock Tokens:
   USDC:  0x74FB067E49CBd0f97Dc296919e388CB3CFB62b4D
@@ -250,6 +283,21 @@ Mock Tokens:
   ZCHF:  0xF27edF22FD76A044eA5B77E1958863cf9A356132
   tGBP:  0xb4db79424725256a6E6c268fc725979b24171857
   IDRX:  0x34976B6c7Aebe7808c7Cab34116461EB381Bc2F8
+
+### Etherlink Shadownet (Testnet)
+
+EntryPoint:            0x0000000071727De22E5E9d8BAf0edAc6f37da032
+StablecoinRegistry:    0x02076D7C410f09CE220435f6e18672Be70A15b67
+Paymaster:             0x94A0b7E05E07b507BF4e2870DD7B428a148C7eCb
+StableSwap:            0xB67b210dEe4C1A744c1d51f153b3B3caF5428F60
+PaymentProcessor:      0x5D4748951fB0AF37c57BcCb024B3EE29360148bc
+SimpleAccountFactory:  0xb7E56FbAeC1837c5693AAf35533cc94e35497d86
+QRISRegistry:          0xD17d8f2819C068A57f0F4674cF439d1eC96C56f5
+
+Mock Tokens:
+  USDC:  0x60E48d049EB0c75BF428B028Da947c66b68f5dd2
+  USDT:  0xcaF86109F34d74DE0e554FD5E652C412517374fb
+  IDRX:  0x8A272505426D4F129EE3493A837367B884653237
 ```
 
 ## Security Considerations
@@ -265,7 +313,7 @@ Mock Tokens:
 
 This project uses:
 
-- Solidity 0.8.31 (Cancun)
+- Solidity 0.8.31 (Cancun by default, Osaka for Etherlink profile)
 - Foundry for testing and deployment
 - OpenZeppelin contracts for standards
 

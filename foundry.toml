@@ -17,6 +17,11 @@ remappings = [
 # Base Sepolia Network Configuration
 [rpc_endpoints]
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+etherlink_shadownet = "${ETHERLINK_SHADOWNET_RPC_URL}"
+
+# Etherlink Shadownet uses EVM Osaka
+[profile.etherlink]
+evm_version = "osaka"
 
 [etherscan]
 base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
