@@ -180,7 +180,7 @@ contract StablecoinRegistryTest is Test {
     function testSetEthUsdRateEnforcesBounds() public {
         vm.prank(owner);
         vm.expectRevert("Registry: rate too low");
-        registry.setEthUsdRate(500e8);
+        registry.setEthUsdRate(1e5); // 0.001 USD (below 0.01 min)
 
         vm.prank(owner);
         vm.expectRevert("Registry: rate too high");
@@ -309,7 +309,7 @@ contract StablecoinRegistryTest is Test {
         assertEq(minRate, 1e4);
         assertEq(maxRate, 1e16);
         assertEq(maxChange, 5000);
-        assertEq(minEth, 1000e8);
+        assertEq(minEth, 1e6);
         assertEq(maxEth, 100000e8);
     }
 
