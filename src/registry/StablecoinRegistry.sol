@@ -22,10 +22,10 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     uint256 public constant MAX_RATE_TO_USD = 1e16;
     uint256 public constant MAX_RATE_CHANGE_BPS = 5000;
     uint256 public constant BPS_DENOMINATOR = 10000;
-    uint256 public constant MIN_ETH_USD_RATE = 1000e8;
+    uint256 public constant MIN_ETH_USD_RATE = 1e6; // $0.01 with 8 decimals
     uint256 public constant MAX_ETH_USD_RATE = 100000e8;
 
-    /// @notice rate eth to usd -> $3000 - manual update
+    /// @notice native token to USD rate (8 decimals) -> default $3000
     uint256 public ethUsdRate = 3000e8;
 
     mapping(address => StablecoinInfo) private stablecoins;
@@ -169,8 +169,8 @@ contract StablecoinRegistry is IStablecoinRegistry, Ownable, Pausable {
     }
 
     /**
-     * @notice Update ETH/USD rate
-     * @param newRate New ETH/USD rate (with 8 decimals)
+     * @notice Update native token/USD rate
+     * @param newRate New rate (with 8 decimals)
      */
     function setEthUsdRate(uint256 newRate) external onlyOwner {
         require(newRate >= MIN_ETH_USD_RATE, "Registry: rate too low");

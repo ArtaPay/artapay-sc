@@ -27,6 +27,102 @@ contract DeployEtherlink is Script {
     PaymentProcessor public paymentProcessor;
     SimpleAccountFactory public accountFactory;
 
+    function _getNativeUsdRate() internal view returns (uint256) {
+        return vm.envOr("INITIAL_XTZ_USD_RATE", vm.envUint("INITIAL_ETH_USD_RATE"));
+    }
+
+    function _buildTokenConfig(address usdcAddr, address usdtAddr, address idrxAddr)
+        internal
+        view
+        returns (address[] memory tokens, string[] memory symbols, string[] memory regions, uint256[] memory rates)
+    {
+        tokens = new address[](3);
+        symbols = new string[](3);
+        regions = new string[](3);
+        rates = new uint256[](3);
+
+        tokens[0] = usdcAddr;
+        symbols[0] = "USDC";
+        regions[0] = "US";
+        rates[0] = vm.envUint("USDC_RATE");
+
+        tokens[1] = usdtAddr;
+        symbols[1] = "USDT";
+        regions[1] = "US";
+        rates[1] = vm.envUint("USDT_RATE");
+
+        tokens[2] = idrxAddr;
+        symbols[2] = "IDRX";
+        regions[2] = "ID";
+        rates[2] = vm.envUint("IDRX_RATE");
+    }
+
+    function deployRegistryAndPaymaster() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        address deployer = vm.addr(deployerPrivateKey);
+
+        console.log("\n========================================");
+        console.log("   ARTAPAY ETHERLINK REGISTRY+PAYMASTER");
+        console.log("========================================\n");
+        console.log("Deployer Address:", deployer);
+        console.log("EntryPoint:", vm.envAddress("ENTRYPOINT_ADDRESS"));
+        console.log("XTZ/USD Rate:", _getNativeUsdRate());
+
+        address usdcAddr = vm.envAddress("MOCK_USDC_ADDRESS");
+        address usdtAddr = vm.envAddress("MOCK_USDT_ADDRESS");
+        address idrxAddr = vm.envAddress("MOCK_IDRX_ADDRESS");
+
+        (address[] memory tokens, string[] memory symbols, string[] memory regions, uint256[] memory rates) =
+            _buildTokenConfig(usdcAddr, usdtAddr, idrxAddr);
+
+        console.log("\n=== Deploying StablecoinRegistry ===");
+        registry = new StablecoinRegistry();
+        console.log("StablecoinRegistry deployed at:", address(registry));
+        registry.setEthUsdRate(_getNativeUsdRate());
+        console.log("XTZ/USD rate set to:", _getNativeUsdRate());
+
+        console.log("\n=== Registering Stablecoins ===");
+        registry.batchRegisterStablecoins(tokens, symbols, regions, rates);
+        console.log("Registered 3 stablecoins in registry");
+
+        console.log("\n=== Deploying Paymaster ===");
+        paymaster = new Paymaster(vm.envAddress("ENTRYPOINT_ADDRESS"), address(registry));
+        console.log("Paymaster deployed at:", address(paymaster));
+        paymaster.addSupportedTokens(tokens);
+        console.log("Added 3 supported tokens to Paymaster");
+
+        uint256 totalWei = vm.envOr("ENTRYPOINT_DEPOSIT_WEI", uint256(0));
+        if (totalWei > 0) {
+            uint256 stakeWei = totalWei / 2;
+            uint256 depositWei = totalWei - stakeWei;
+
+            if (depositWei > 0) {
+                paymaster.deposit{value: depositWei}();
+                console.log("Deposited to EntryPoint:", depositWei, "wei");
+            }
+
+            if (stakeWei > 0) {
+                uint256 unstakeDelay = vm.envOr("ENTRYPOINT_UNSTAKE_DELAY_SEC", uint256(86400));
+                require(unstakeDelay <= type(uint32).max, "ENTRYPOINT_UNSTAKE_DELAY_SEC too large");
+                paymaster.addStake{value: stakeWei}(uint32(unstakeDelay));
+                console.log("Staked in EntryPoint:", stakeWei, "wei");
+                console.log("Unstake delay:", unstakeDelay, "sec");
+            }
+        } else {
+            console.log("Skipping EntryPoint deposit/stake (ENTRYPOINT_DEPOSIT_WEI not set)");
+        }
+
+        console.log("\n========================================");
+        console.log("   COPY TO .env FILE");
+        console.log("========================================\n");
+        console.log("STABLECOIN_REGISTRY_ADDRESS=%s", address(registry));
+        console.log("PAYMASTER_ADDRESS=%s", address(paymaster));
+        console.log("\n========================================\n");
+
+        vm.stopBroadcast();
+    }
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -37,7 +133,7 @@ contract DeployEtherlink is Script {
         console.log("========================================\n");
         console.log("Deployer Address:", deployer);
         console.log("EntryPoint:", vm.envAddress("ENTRYPOINT_ADDRESS"));
-        console.log("Initial ETH/USD Rate:", vm.envUint("INITIAL_ETH_USD_RATE"));
+        console.log("XTZ/USD Rate:", _getNativeUsdRate());
 
         console.log("\n=== Step 1: Deploying Mock Stablecoins ===");
 
@@ -66,8 +162,8 @@ contract DeployEtherlink is Script {
         registry = new StablecoinRegistry();
         console.log("StablecoinRegistry deployed at:", address(registry));
 
-        registry.setEthUsdRate(vm.envUint("INITIAL_ETH_USD_RATE"));
-        console.log("ETH/USD rate set to:", vm.envUint("INITIAL_ETH_USD_RATE"));
+        registry.setEthUsdRate(_getNativeUsdRate());
+        console.log("XTZ/USD rate set to:", _getNativeUsdRate());
 
         console.log("\n=== Step 4: Deploying QRISRegistry ===");
 
@@ -76,25 +172,8 @@ contract DeployEtherlink is Script {
 
         console.log("\n=== Step 5: Registering Stablecoins ===");
 
-        address[] memory tokens = new address[](3);
-        string[] memory symbols = new string[](3);
-        string[] memory regions = new string[](3);
-        uint256[] memory rates = new uint256[](3);
-
-        tokens[0] = address(usdc);
-        symbols[0] = "USDC";
-        regions[0] = "US";
-        rates[0] = vm.envUint("USDC_RATE");
-
-        tokens[1] = address(usdt);
-        symbols[1] = "USDT";
-        regions[1] = "US";
-        rates[1] = vm.envUint("USDT_RATE");
-
-        tokens[2] = address(idrx);
-        symbols[2] = "IDRX";
-        regions[2] = "ID";
-        rates[2] = vm.envUint("IDRX_RATE");
+        (address[] memory tokens, string[] memory symbols, string[] memory regions, uint256[] memory rates) =
+            _buildTokenConfig(address(usdc), address(usdt), address(idrx));
 
         registry.batchRegisterStablecoins(tokens, symbols, regions, rates);
         console.log("Registered 3 stablecoins in registry");
@@ -165,7 +244,7 @@ contract DeployEtherlink is Script {
 
         console.log("Network Configuration:");
         console.log("  EntryPoint:", vm.envAddress("ENTRYPOINT_ADDRESS"));
-        console.log("  ETH/USD Rate:", vm.envUint("INITIAL_ETH_USD_RATE"));
+        console.log("  XTZ/USD Rate:", _getNativeUsdRate());
 
         console.log("\nMock Stablecoins:");
         console.log("  USDC:", address(usdc));
