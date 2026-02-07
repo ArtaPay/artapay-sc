@@ -7,7 +7,7 @@ Smart Contract for ArtaPay dApp using ERC-4337 Account Abstraction payment infra
 ArtaPay is a decentralized payment platform that leverages ERC-4337 Account Abstraction to provide:
 
 - **One-time approval**: Users approve once, then all future transactions are gasless
-- **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH
+- **Gasless Transactions**: Users pay fees in stablecoins instead of native ETH and XTZ
 - **Multi-Stablecoin Support**: Support for 10 stablecoins (USDC, USDT, USDS, EURC, BRZ, AUDD, CADC, ZCHF, tGBP, IDRX)
 - **QR Payment Requests**: Merchants create gasless payment requests via off-chain signatures
 - **QRIS Supported**: Pay to QRIS (Quick Response Code Indonesian Standard)
@@ -34,7 +34,7 @@ The central contract for sponsoring gas fees and collecting payment in stablecoi
 
 - `validatePaymasterUserOp()` - Validates UserOperations and sponsors gas
 - `postOp()` - Collects fees in stablecoins after execution
-- `calculateFee()` - Calculates stablecoin cost for ETH gas
+- `calculateFee()` - Calculates stablecoin cost for ETH and XTZ gas
 
 #### 2. **StablecoinRegistry.sol** - Rate and Conversion Registry
 
@@ -45,13 +45,13 @@ Manages stablecoin metadata and handles conversions between different tokens.
 - Supports 10 stablecoins with hardcoded exchange rates
 - 8 decimal precision for all rates
 - Uses USD as intermediate for conversions
-- ETH <-> Stablecoin conversion for gas calculations
+- ETH and XTZ <-> Stablecoin conversion for gas calculations
 - Rate change limits (50% max per update)
 
 **Main Functions:**
 
 - `convert()` - Convert between any two registered stablecoins
-- `ethToToken()` - Convert ETH amount to stablecoin for gas fees
+- `ethToToken()` - Convert ETH and XTZ amount to stablecoin for gas fees
 - `updateRate()` - Update exchange rates (owner only)
 
 #### 3. **QRISRegistry.sol** - QRIS Registry
